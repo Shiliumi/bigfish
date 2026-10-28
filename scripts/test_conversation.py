@@ -89,6 +89,9 @@ class ConversationTest(unittest.TestCase):
             self.assertEqual(talk.recent_voice(store,'another-chat',self.now),[])
             store.capture('another-chat','额外的问题。','爹，脑子缓冲中，你觉得呢？')
         packet=self.packet('爹，随便唠两句。');self.assertIn('最近开头称呼较密',packet);self.assertNotIn('第0个问题',packet)
+    def test_plain_casual_turns_reuse_static_guide_without_an_empty_dynamic_packet(self):
+        self.assertEqual(self.packet('爹今天喝水了吗？'),'');self.assertEqual(self.packet('今天想喝热水。'),'')
+        self.assertIn('focused',self.packet('帮我排查代码报错。'))
     def test_expression_trials_are_suppressed_during_serious_requests(self):
         with Journal(self.root,now=self.now)as store:proof=store.capture('seed','一起看折叠凳机关。','这个反差还挺有意思。')
         personality.propose_trial(self.root,{'id':'small-jokes','kind':'expression','text':'我似乎更喜欢从小细节里冒出来的笑点。','reason':'这次结构里的反差让我觉得很好笑。','evidence_ids':[proof['id']]},self.now)

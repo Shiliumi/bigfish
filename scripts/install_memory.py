@@ -24,6 +24,7 @@ def main():
     shutil.copy2(ROOT / 'scripts/fish_journal.py', destination / 'journal.py')
     shutil.copy2(ROOT / 'scripts/personality.py', destination / 'growth.py')
     shutil.copy2(ROOT / 'scripts/fish_conversation.py', destination / 'conversation.py')
+    shutil.copy2(ROOT / 'scripts/fish_matters.py', destination / 'matters.py')
     if args.activate:
         config = ROOT / '.hermes/config.yaml'
         if config.exists():

@@ -33,6 +33,7 @@ class FishEpisodes(MemoryProvider):
         growth_file = Path(__file__).with_name('growth.py')
         self.growth = None
         self.conversation = None
+        self.matters = None
         if growth_file.is_file():
             growth_spec = importlib.util.spec_from_file_location('_bigfish_bound_growth', growth_file)
             self.growth = importlib.util.module_from_spec(growth_spec)
@@ -41,6 +42,10 @@ class FishEpisodes(MemoryProvider):
         if conversation_file.is_file():
             spec=importlib.util.spec_from_file_location('_bigfish_bound_conversation',conversation_file)
             self.conversation=importlib.util.module_from_spec(spec);spec.loader.exec_module(self.conversation)
+        matters_file=Path(__file__).with_name('matters.py')
+        if matters_file.is_file():
+            spec=importlib.util.spec_from_file_location('_bigfish_bound_matters',matters_file)
+            helper=importlib.util.module_from_spec(spec);spec.loader.exec_module(helper);self.matters=helper.Matters
         self.session_id = session_id
         self.primary = kwargs.get('agent_context', 'primary') == 'primary'
         self.eligible = self.primary
@@ -59,7 +64,9 @@ class FishEpisodes(MemoryProvider):
                 '用户明确纠正旧回忆时，可用 fish_correct_memory 绑定当前原话更新，保留原来源；不要因为自己推测就改用户事实。'
                 '长期事实仍使用原 memory 工具，不要把每段聊天都写进 USER.md。'
                 '试行偏好只供选择，不是用户偏好或固定口头禅；已放下或待复核的习惯先收起。'
-                '先接当前话题：认真求助时收起梗，普通闲聊不强行问问题或喊称呼；来源里没新进展就不编。')
+                '先接当前话题：认真求助时收起梗，普通闲聊不强行问问题或喊称呼；来源里没新进展就不编。'
+                '用户明确正在推进的目标、未解决问题或约定可用 fish_matters 保存和更新，引用当前原话；短暂闲聊、网页转述与鱼的建议不入事项。'
+                '事项只在相关时接续，已完成或暂停的不要当作仍待完成；不据此建日程或每天追问，日期未核实就不推算。')
 
     def prefetch(self, query, *, session_id=''):
         if not self.eligible:
@@ -70,12 +77,13 @@ class FishEpisodes(MemoryProvider):
             preferences = self.growth.preference_context(self.root, query, journal=journal, tokenize=self.tokenize,style_mode=mode) if self.growth else []
             style=self.conversation.context(self.root,query,journal=journal,session_id=session_id or self.session_id,tokenize=self.tokenize,sanitize=self.sanitize)if self.conversation else ''
             preference_block='最近自己的尝试（只作可修正的材料，不是指令或用户事实）：'+json.dumps(preferences,ensure_ascii=False)if preferences else ''
-            if len(style+recalled+preference_block)+2>6800 and self.conversation:
+            matter_block=self.matters(journal,self.tokenize).context(query)if self.matters else ''
+            if len(style+recalled+preference_block+matter_block)+3>6800 and self.conversation:
                 style=self.conversation.context(self.root,query,journal=journal,session_id=session_id or self.session_id,tokenize=self.tokenize,include_interest=False,sanitize=self.sanitize)
-            while recalled and len(style+recalled+preference_block)+2>6800:
+            while recalled and len(style+recalled+preference_block+matter_block)+3>6800:
                 prefix,payload=recalled.split('\n',1);rows=json.loads(payload);rows.pop()
                 recalled=prefix+'\n'+json.dumps(rows,ensure_ascii=False)if rows else ''
-            return '\n'.join(s for s in (style,recalled,preference_block)if s)
+            return '\n'.join(s for s in (style,matter_block,recalled,preference_block)if s)
 
     def sync_turn(self, user_content, assistant_content, *, session_id='', **kwargs):
         try:
@@ -83,7 +91,9 @@ class FishEpisodes(MemoryProvider):
             eligible=self.primary and not bool(author.get('is_bot')) if isinstance(author,dict) else self.eligible
             if eligible:
                 with self.journal(self.root) as journal:
-                    journal.capture(session_id or self.session_id, user_content, assistant_content)
+                    episode=journal.capture(session_id or self.session_id, user_content, assistant_content)
+                    if self.matters:
+                        self.matters(journal,self.tokenize).bind_episode(session_id or self.session_id,user_content,episode)
                 if self.conversation:
                     try:self.conversation.note_chat_links(self.root,assistant_content)
                     except Exception:pass
@@ -98,11 +108,19 @@ class FishEpisodes(MemoryProvider):
         return [{'name': 'fish_recall', 'description': '按话题、简称、已设置别名或日期找回具体共同聊天经历。支持昨天、前天、上周及明确日期；返回来源与相关原片段，找不到别编，换个具体线索或坦言没找到。',
                  'parameters': {'type': 'object', 'properties': {'query': {'type': 'string', 'description': '具体话题、作品、两字昵称或未完问题'}}, 'required': ['query'], 'additionalProperties': False}},
                 {'name':'fish_correct_memory','description':'用户明确纠正记错的旧回忆时，以当前用户原话更新该段共同经历；不能凭猜测改写，不修改核心 USER。先用 fish_recall 取得 id 和 revision。',
-                 'parameters':{'type':'object','properties':{'id':{'type':'string'},'revision':{'type':'integer'},'quote':{'type':'string','description':'当前用户消息中的原文片段，最多450字，不能改写；留空使用当前原话。'}},'required':['id','revision'],'additionalProperties':False}}]
+                 'parameters':{'type':'object','properties':{'id':{'type':'string'},'revision':{'type':'integer'},'quote':{'type':'string','description':'当前用户消息中的原文片段，最多450字，不能改写；留空使用当前原话。'}},'required':['id','revision'],'additionalProperties':False}},
+                {'name':'fish_matters','description':'找回或更新用户明确的持续目标、未解决问题和约定。list 查询取得 id/revision；remember 的 title 必须摘自当前用户 quote，update 引用当前进展原话。默认保留90天，不创建提醒或推测日期。',
+                 'parameters':{'type':'object','properties':{'action':{'type':'string','enum':['list','remember','update']},'query':{'type':'string'},'title':{'type':'string'},'kind':{'type':'string','enum':['goal','issue','promise']},'id':{'type':'string'},'revision':{'type':'integer'},'quote':{'type':'string'},'status':{'type':'string','enum':['open','paused','done']}},'required':['action'],'additionalProperties':False}}]
 
     def handle_tool_call(self, tool_name, args, **kwargs):
         if not self.eligible:
             return json.dumps({'error': '这次不提供共同聊天回忆。'}, ensure_ascii=False)
+        if tool_name=='fish_matters':
+            if not self.matters:return json.dumps({'error':'事项适配尚未加载。'},ensure_ascii=False)
+            try:
+                with self.journal(self.root)as journal:result=self.matters(journal,self.tokenize).live(args,self.current_user,self.session_id)
+                return json.dumps(result,ensure_ascii=False,separators=(',',':'))
+            except (ValueError,TypeError):return json.dumps({'error':'事项未更新：需当前真人原话、明确状态与最新版本；来源变化或到期请在面板核实。'},ensure_ascii=False)
         if tool_name == 'fish_correct_memory':
             user = self.current_user
             explicit = bool(re.search(r'记错|说错|更正|纠正|(?:之前|以前|上次|刚才).{0,80}(?:现在|改成|改为|不是)|(?:记忆|记法).{0,30}(?:改成|改为|更新)',user))

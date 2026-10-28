@@ -108,6 +108,11 @@ async function handleAPI(req,res,url) {
   if(name==='/api/budget' && req.method==='PUT') {const data=await body(req);return json(res,200,await learningScript(ROOT,'fish_budget.py',{action:'settings',enabled:data.enabled,daily_tokens:data.daily_tokens,revision:data.revision}));}
   if(name==='/api/automation/settings' && req.method==='PUT') return json(res,200,await usage.saveSettings(await body(req)));
   if(name==='/api/episodes' && req.method==='GET') return json(res,200,await journal(ROOT,{q:(url.searchParams.get('q')||'').slice(0,200),scope:url.searchParams.get('scope')||'current',limit:30}));
+  if(name==='/api/matters' && req.method==='GET') return json(res,200,await learningScript(ROOT,'fish_matters.py',{action:'list',query:(url.searchParams.get('q')||'').slice(0,200)}));
+  if(name==='/api/matters' && req.method==='POST') {const data=await body(req);return json(res,200,await learningScript(ROOT,'fish_matters.py',{action:'remember',title:data.title,kind:data.kind}));}
+  const matter=name.match(/^\/api\/matters\/(mt-[a-f0-9]{24})$/);
+  if(matter && req.method==='GET') {const value=await learningScript(ROOT,'fish_matters.py',{action:'detail',id:matter[1]});if(!value)fail('事项不存在或已遗忘。',404);return json(res,200,value);}
+  if(matter && req.method==='PATCH') {const data=await body(req);return json(res,200,await learningScript(ROOT,'fish_matters.py',{action:'update',id:matter[1],revision:data.revision,status:data.status,quote:data.quote,renew:data.renew??false,forget:data.forget??false}));}
   if(name==='/api/personality' && req.method==='GET') return json(res,200,await learningScript(ROOT,'personality.py',{action:'snapshot'}));
   const preference=name.match(/^\/api\/personality\/([a-z][a-z0-9-]{1,39})$/);
   if(preference && req.method==='PATCH') {const data=await body(req);return json(res,200,await learningScript(ROOT,'personality.py',{action:'retire',id:preference[1],revision:data.revision}));}

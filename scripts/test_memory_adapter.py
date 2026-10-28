@@ -17,6 +17,7 @@ class AdapterTest(unittest.TestCase):
         source=Path(__file__).resolve().parents[1]
         shutil.copy2(source/'plugins/fish-episodes/__init__.py',plugin/'__init__.py');shutil.copy2(source/'scripts/fish_journal.py',plugin/'journal.py');shutil.copy2(source/'scripts/personality.py',plugin/'growth.py')
         shutil.copy2(source/'scripts/fish_conversation.py',plugin/'conversation.py')
+        shutil.copy2(source/'scripts/fish_matters.py',plugin/'matters.py')
         stub=types.ModuleType('agent.memory_provider');stub.MemoryProvider=type('MemoryProvider',(),{})
         with patch.dict(sys.modules,{'agent.memory_provider':stub}):
             spec=importlib.util.spec_from_file_location('test_fish_adapter',plugin/'__init__.py');module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
@@ -24,7 +25,7 @@ class AdapterTest(unittest.TestCase):
     def initialize(self,scope='primary'):
         self.provider.initialize('chat-new',hermes_home=str(self.root/'.hermes'),agent_context=scope)
     def test_tool_routes_are_advertised_before_initialization_but_cannot_execute(self):
-        self.assertEqual({s['name']for s in self.provider.get_tool_schemas()},{'fish_recall','fish_correct_memory'})
+        self.assertEqual({s['name']for s in self.provider.get_tool_schemas()},{'fish_recall','fish_correct_memory','fish_matters'})
         self.assertIn('error',json.loads(self.provider.handle_tool_call('fish_recall',{'query':'积木'})))
     def test_primary_turn_records_once_and_recall_excludes_current_conversation(self):
         self.initialize();self.provider.on_turn_start(1,'旧话题');self.provider.sync_turn('还记得阿蓝的积木厨房吗','上次加了升降台。')
@@ -105,6 +106,22 @@ class AdapterTest(unittest.TestCase):
         self.initialize();self.provider.on_turn_start(1,'帮我排查代码报错。')
         packet=self.provider.prefetch('帮我排查代码报错。')
         self.assertIn('focused',packet);self.assertNotIn('"interest":',packet);self.assertLessEqual(len(packet),6800)
+    def test_live_matter_tool_records_progress_and_binds_to_the_actual_human_episode(self):
+        self.initialize();user='我准备写毕业论文，先看文献。';self.provider.on_turn_start(1,user)
+        args={'action':'remember','title':'准备写毕业论文','kind':'goal','quote':user}
+        result=json.loads(self.provider.handle_tool_call('fish_matters',args));self.assertTrue(result['ok']);ident=result['item']['id']
+        self.provider.sync_turn(user,'好，先把文献收一收。')
+        with self.provider.journal(self.root)as store:
+            item=self.provider.matters(store,self.provider.tokenize).describe(self.provider.matters(store,self.provider.tokenize).get(ident),history=True)
+            self.assertTrue(item['source_episode_id']);self.assertEqual(item['history'][0]['quote'],user)
+        self.provider.on_session_switch('chat-next');self.provider.on_turn_start(1,'毕业论文后来怎么样？');self.assertIn(ident,self.provider.prefetch('毕业论文后来怎么样？'))
+        update='毕业论文已经提交了。';self.provider.on_turn_start(2,update)
+        result=json.loads(self.provider.handle_tool_call('fish_matters',{'action':'update','id':ident,'revision':1,'status':'done','quote':update}));self.assertEqual(result['item']['status'],'done')
+    def test_matters_cannot_be_written_by_cron_bot_or_completed_turn(self):
+        user='我准备写毕业论文，先看文献。';args={'action':'remember','title':'准备写毕业论文','kind':'goal','quote':user}
+        self.initialize('cron');self.assertIn('error',json.loads(self.provider.handle_tool_call('fish_matters',args)))
+        self.initialize();self.provider.on_turn_start(1,user,author_is_bot=True);self.assertIn('error',json.loads(self.provider.handle_tool_call('fish_matters',args)))
+        self.provider.on_turn_start(2,user);self.provider.sync_turn(user,'好。');self.assertIn('error',json.loads(self.provider.handle_tool_call('fish_matters',args)))
     def test_failed_interest_metadata_does_not_lose_the_completed_human_turn(self):
         self.initialize();self.provider.on_turn_start(1,'这个折叠机关是怎么做的？')
         with patch.object(self.provider.conversation,'note_chat_links',side_effect=ValueError('invalid source metadata')):
