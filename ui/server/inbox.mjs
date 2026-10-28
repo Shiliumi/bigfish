@@ -28,11 +28,20 @@ export function createInbox(root, clock = Date.now) {
     if(!/^reports\/\d{4}-\d{2}-\d{2}\/[\w-]+\.md$/.test(data.report_path||''))return null;
     const report=await readFile(path.join(root,data.report_path),'utf8'),surf=JSON.parse(await readFile(path.join(directory,'surf-state.json'),'utf8'));
     if(!report.includes(data.source_url)||!surf.visited?.some(v=>v.url===data.source_url))return null;
+    let continuity={};
+    if(data.thread_id){
+      const state=JSON.parse(await readFile(path.join(directory,'curiosity/state.json'),'utf8'));
+      const run=state.runs?.find(r=>r.id===data.browse_run_id&&r.thread_id===data.thread_id&&r.status==='finished'&&r.report_path===data.report_path);
+      const thread=state.threads?.find(t=>t.id===data.thread_id);
+      const expires=Date.parse(thread?.expires_at),started=Date.parse(run?.started_at);
+      if(!run||!thread||thread.status!=='open'||!Number.isFinite(expires)||expires<=now||!Number.isFinite(started)||started>timestamp||!surf.visited?.some(v=>v.url===data.source_url&&v.report===data.report_path&&Date.parse(v.read_at)>=started-120000&&Date.parse(v.read_at)<=timestamp+60000))return null;
+      continuity={thread_id:thread.id,thread_question:String(thread.question||'').slice(0,160)};
+    }
     let sticker;if(/^[a-f0-9]{16}$/.test(data.sticker_id||'')){
       const library=JSON.parse(await readFile(path.join(directory,'stickers/library.json'),'utf8').catch(()=>' {"items":[]}'));
       if(library.items.some(item=>item.id===data.sticker_id))sticker=data.sticker_id;
     }
-    return {kind:'surf',sticker_id:sticker,text:data.text.trim(),source_url:data.source_url,source_title:String(data.source_title||'刚看到的内容').slice(0,120),report_path:data.report_path,created_at:new Date(timestamp).toISOString()};
+    return {kind:'surf',sticker_id:sticker,text:data.text.trim(),source_url:data.source_url,source_title:String(data.source_title||'刚看到的内容').slice(0,120),report_path:data.report_path,created_at:new Date(timestamp).toISOString(),...continuity};
   }
   return {
     activity(){lastActivity=clock();},
@@ -52,7 +61,7 @@ export function createInbox(root, clock = Date.now) {
         changed=true;return true;
       };
       const pending=[];for(const candidate of data.pending)if(!deliver(candidate))pending.push(candidate);data.pending=pending;
-      for(const candidate of greetingCandidates(now,data.settings))if(!data.processed.includes(candidate.dedupe_key))deliver(candidate,candidate.dedupe_key);
+      for(const candidate of greetingCandidates(now,data.settings,data.messages))if(!data.processed.includes(candidate.dedupe_key))deliver(candidate,candidate.dedupe_key);
       const files=(await readdir(spool).catch(error=>{if(error.code==='ENOENT')return [];throw error;})).filter(f=>/^[\w-]+\.json$/.test(f)).sort();
       for(const file of files){
         if(data.processed.includes(file))continue;

@@ -16,6 +16,13 @@ test('Beijing greetings have short windows, no missed catch-up, and no source fa
   assert.equal(greetingCandidates(at('22:00')).length,0);
   assert.equal(greetingCandidates(at('09:05'),{...SOCIAL_DEFAULTS,greetings:false}).length,0);
 });
+test('daily greeting choices avoid the previous three actual greetings of the same kind',()=>{
+ const history=[];
+ for(let i=0;i<20;i++){
+  const now=at('09:05')+i*86400000,candidate=greetingCandidates(now,SOCIAL_DEFAULTS,history)[0];
+  assert.ok(!history.slice(-3).some(m=>m.text===candidate.text));history.push({...candidate,sent_at:new Date(now).toISOString()});
+ }
+});
 test('greetings and credit notices have their own once-only caps; typing and quiet hours still defer',()=>{
   const now=at('09:05'), greeting=greetingCandidates(now)[0];
   assert.equal(deliveryDecision(greeting,[],SOCIAL_DEFAULTS,now),'send');

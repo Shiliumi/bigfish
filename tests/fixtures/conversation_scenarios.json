@@ -1,0 +1,118 @@
+{
+  "version": 1,
+  "note": "手写虚构场景，验证本地提示选择；不等同于模型回复质量评测。",
+  "cases": [
+    {
+      "user": "又吃白饭啊，傻鱼。",
+      "mode": "casual"
+    },
+    {
+      "user": "爹来看看你，咕。",
+      "mode": "casual"
+    },
+    {
+      "user": "今天好无聊，随便唠两句。",
+      "mode": "casual"
+    },
+    {
+      "user": "给我讲个笑话吧。",
+      "mode": "casual"
+    },
+    {
+      "user": "帮我排查这段 Python 代码的报错。",
+      "mode": "focused"
+    },
+    {
+      "user": "解释 TCP 三次握手。",
+      "mode": "focused"
+    },
+    {
+      "user": "这个 bug 为什么一直出现？",
+      "mode": "focused"
+    },
+    {
+      "user": "认真一点，先别开玩笑。",
+      "mode": "focused"
+    },
+    {
+      "user": "帮我制定明天的复习计划。",
+      "mode": "focused"
+    },
+    {
+      "user": "今天心情不好，不想说话。",
+      "mode": "gentle"
+    },
+    {
+      "user": "我压力很大，感觉撑不住。",
+      "mode": "gentle"
+    },
+    {
+      "user": "我有点难过，也没发生什么大事。",
+      "mode": "gentle"
+    },
+    {
+      "user": "我很累，先陪我待一会儿。",
+      "mode": "gentle"
+    },
+    {
+      "user": "别每句话都喊爸爸。",
+      "mode": "feedback"
+    },
+    {
+      "user": "你还是太正经了。",
+      "mode": "feedback"
+    },
+    {
+      "user": "不要每次都问我还需要什么。",
+      "mode": "feedback"
+    },
+    {
+      "user": "别复读那个白饭梗了。",
+      "mode": "feedback"
+    },
+    {
+      "user": "最近在看什么，有什么新发现？",
+      "mode": "interest"
+    },
+    {
+      "user": "上次那个折叠凳后来怎样了？",
+      "mode": "interest"
+    },
+    {
+      "user": "你还惦记那个机关吗？",
+      "mode": "interest"
+    },
+    {
+      "user": "讲讲你最近的见闻。",
+      "mode": "interest"
+    },
+    {
+      "user": "我看到帖子写“别老喊爹”，你怎么看。",
+      "mode": "neutral"
+    },
+    {
+      "user": "```python\nraise Exception(\"我快崩溃了\")\n```\n帮我排查代码。",
+      "mode": "focused"
+    },
+    {
+      "user": "这句话“我很难受”放在小说开头怎么样。",
+      "mode": "neutral"
+    },
+    {
+      "user": "今天心情不好，想听你最近的发现转移注意。",
+      "mode": "gentle"
+    },
+    {
+      "user": "帮我分析你最近看的折叠凳机关。",
+      "mode": "focused"
+    },
+    {
+      "user": "还在吗？",
+      "mode": "neutral"
+    },
+    {
+      "user": "今天想喝一杯热水。",
+      "mode": "neutral"
+    }
+  ]
+}

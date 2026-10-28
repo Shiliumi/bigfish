@@ -142,6 +142,10 @@ def complete(root,data,now=None):
                 p=pages[share['page_index']]
                 letter={'worth_sharing':True,'text':curiosity.text(share.get('text'),'想说的话',8,320),'why_share':curiosity.text(share.get('why_share'),'分享理由',6,240),
                     'source_url':p['url'],'source_title':p['title'],'report_path':name,'created_at':now.isoformat()}
+                if run.get('thread_id'):
+                    from fish_conversation import verified_threads
+                    previous=next((t for t in verified_threads(root,now)if t['id']==run['thread_id']),None)
+                    if previous:letter.update(thread_id=previous['id'],thread_question=previous['question'],browse_run_id=ident)
                 if share.get('sticker_id'):
                     if not re.fullmatch(r'[a-f0-9]{16}',share['sticker_id']):raise ValueError('表情编号无效。')
                     letter['sticker_id']=share['sticker_id']

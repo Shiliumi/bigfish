@@ -75,17 +75,22 @@ def agenda(root, now=None):
     now = clock(now)
     value = state(root)
     allowed, reason = available(value, now, root)
-    candidates = [v for v in value['threads'] if v['status'] == 'open' and datetime.fromisoformat(v['expires_at']) > now and (not v.get('snoozed_until') or datetime.fromisoformat(v['snoozed_until']) <= now)]
+    from fish_conversation import verified_threads,recent_material,interest_material
+    try:valid={v['id']for v in verified_threads(root,now)}
+    except (ValueError,TypeError,KeyError,OSError):valid=set()
+    candidates = [v for v in value['threads'] if v['id']in valid and v['status'] == 'open' and datetime.fromisoformat(v['expires_at']) > now and (not v.get('snoozed_until') or datetime.fromisoformat(v['snoozed_until']) <= now)]
     def score(item):
         age = min(7, (now - datetime.fromisoformat(item.get('last_followed_at') or item['created_at'])).total_seconds() / 86400)
         return item['interest'] * 2 + age - item.get('visits', 0) * .35
     candidates.sort(key=score, reverse=True)
     # These are quotations from real observations, not user preferences or fixed identity.
-    evidence = observations(root)[-6:]
+    evidence = recent_material(root,now)
     from personality import preference_context
     preferences = preference_context(root, '', now=now, for_browsing=True)
+    continuity = interest_material(root,now=now,for_browsing=True)
     return {'can_go': allowed, 'rest_reason': reason, 'used_today': recent_count(value, now, root), 'daily_limit': activity_settings(root)['max_outings'],
             'trial_preferences': preferences,
+            'continuity':continuity,
             'threads': candidates[:3], 'recent_observations': [{k: row.get(k) for k in ('id', 'url', 'observation', 'candidate_trait', 'reason')} for row in evidence],
             'choice': '先想自己还想知道什么。可以追一个问题，也可以从一个新入口随便看看；不想逛就休息，不必交三条发现。'}
 

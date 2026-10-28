@@ -16,6 +16,7 @@ class AdapterTest(unittest.TestCase):
         plugin=self.root/'.hermes/plugins/fish-episodes';plugin.mkdir(parents=True)
         source=Path(__file__).resolve().parents[1]
         shutil.copy2(source/'plugins/fish-episodes/__init__.py',plugin/'__init__.py');shutil.copy2(source/'scripts/fish_journal.py',plugin/'journal.py');shutil.copy2(source/'scripts/personality.py',plugin/'growth.py')
+        shutil.copy2(source/'scripts/fish_conversation.py',plugin/'conversation.py')
         stub=types.ModuleType('agent.memory_provider');stub.MemoryProvider=type('MemoryProvider',(),{})
         with patch.dict(sys.modules,{'agent.memory_provider':stub}):
             spec=importlib.util.spec_from_file_location('test_fish_adapter',plugin/'__init__.py');module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
@@ -28,7 +29,7 @@ class AdapterTest(unittest.TestCase):
     def test_primary_turn_records_once_and_recall_excludes_current_conversation(self):
         self.initialize();self.provider.on_turn_start(1,'旧话题');self.provider.sync_turn('还记得阿蓝的积木厨房吗','上次加了升降台。')
         self.provider.sync_turn('还记得阿蓝的积木厨房吗','上次加了升降台。')
-        self.assertEqual(self.provider.prefetch('阿蓝'),'')
+        self.assertNotIn('升降台',self.provider.prefetch('阿蓝'))
         self.provider.on_session_switch('chat-later')
         self.assertIn('升降台',self.provider.prefetch('阿蓝'))
         with Journal(self.root) as journal:self.assertEqual(journal.status()['total'],1)
@@ -100,5 +101,15 @@ class AdapterTest(unittest.TestCase):
         self.provider.sync_turn('真人想聊积木机关。','这个抽屉机关很有趣。',turn_author={'is_bot':False})
         with Journal(self.root)as store:
             self.assertEqual(store.status()['total'],1);self.assertIn('抽屉机关',store.recall('积木机关'))
+    def test_provider_supplies_bounded_rhythm_hints_but_no_unrelated_surfing_to_serious_turn(self):
+        self.initialize();self.provider.on_turn_start(1,'帮我排查代码报错。')
+        packet=self.provider.prefetch('帮我排查代码报错。')
+        self.assertIn('focused',packet);self.assertNotIn('"interest":',packet);self.assertLessEqual(len(packet),6800)
+    def test_failed_interest_metadata_does_not_lose_the_completed_human_turn(self):
+        self.initialize();self.provider.on_turn_start(1,'这个折叠机关是怎么做的？')
+        with patch.object(self.provider.conversation,'note_chat_links',side_effect=ValueError('invalid source metadata')):
+            self.provider.sync_turn('这个折叠机关是怎么做的？','来源：https://example.org/folding')
+        with Journal(self.root)as store:self.assertEqual(store.status()['total'],1)
+        self.assertEqual(self.provider.current_user,'')
 
 if __name__=='__main__':unittest.main()

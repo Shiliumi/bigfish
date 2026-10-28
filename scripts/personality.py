@@ -291,7 +291,7 @@ def preference_snapshot(root, now=None, journal=None):
     return {'trials': rows, 'history': state['events'][-12:][::-1], 'profile_revision': profile.get('revision',0), 'legacy_traits': [item for item in profile.get('traits',[]) if not item.get('trial_id')]}
 
 
-def preference_context(root, query, now=None, journal=None, for_browsing=False, tokenize=None):
+def preference_context(root, query, now=None, journal=None, for_browsing=False, tokenize=None,style_mode=None):
     if tokenize is None:
         from fish_journal import tokens
         tokenize = tokens
@@ -302,6 +302,7 @@ def preference_context(root, query, now=None, journal=None, for_browsing=False, 
     ordered = sorted(snapshot['trials'], key=lambda row:(row['stage']=='reconsidering',row['updated_at']), reverse=True)
     for item in ordered:
         correction = item['stage']=='reconsidering' or item['stage']=='retired' and now-timestamp(item['updated_at']) < timedelta(days=7)
+        if style_mode in ('focused','gentle','feedback') and not correction:continue
         related = bool(query_terms.intersection(tokenize(item['text'])))
         if correction or item['stage'] in ('trying','ready') and (for_browsing or item['kind']=='expression' or related):
             candidates.append({'id':item['id'],'text':item['text'],'kind':item['kind'],'stage':item['stage'],'revision':item['revision']})

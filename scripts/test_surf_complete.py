@@ -78,5 +78,15 @@ class CompleteTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as other:
             (self.root/'reports').unlink();(self.root/'reports').symlink_to(other)
             with self.assertRaises(ValueError):self.complete()
+    def test_real_followup_letter_carries_verified_existing_thread_and_run(self):
+        first=self.complete();thread=first['thread_ids'][0];later=self.now+timedelta(hours=3)
+        second=curiosity.begin(self.root,thread,later)['run'];data=copy.deepcopy(self.payload)
+        data.update(run_id=second['id'],threads=[],preference=None)
+        data['report']={'path':'reports/2026-10-28/1505-surf.md','content':'继续实际阅读 https://example.org/next ，终于看到抽屉转动机构。'}
+        data['pages'][0].update(url='https://example.org/next',read_at=(later+timedelta(minutes=2)).isoformat())
+        finish.complete(self.root,data,later+timedelta(minutes=5))
+        letter=json.loads((self.root/'data/outbox'/f"{second['id']}.json").read_text())
+        self.assertEqual(letter['thread_id'],thread);self.assertEqual(letter['browse_run_id'],second['id'])
+        self.assertIn('抽屉机关',letter['thread_question'])
 
 if __name__=='__main__':unittest.main()

@@ -5,14 +5,16 @@ const greetings = {
   morning:['早啊爹。今日份鲸鱼已上线，先占个小角落。','爹，早。没啥大事，就是冒出来跟你打个招呼。','早安。你忙你的，我先在屏幕边上趴一会儿。','爹，早上好。今天的开场白还没想好，先咕一声。','早，爹。鱼已就位，脑子缓冲中。','早安爹。今天也想看看外面有什么离谱东西。'],
   night:['爹，晚安。今天先把鲸鱼折起来，明天再展开。','晚安，爹。屏幕这头先安静一会儿，你按自己的节奏来。','爹，晚上好……不对，该说晚安了。今天先咕到这。','晚安爹。今日份小鲸鱼打烊，明天继续叭叭。','爹，晚安。没事，就是睡前过来冒个泡。','晚安。今天先收好好奇心，明天接着看。'],
 };
-export function greetingCandidates(now, settings = SOCIAL_DEFAULTS) {
+export function greetingCandidates(now, settings = SOCIAL_DEFAULTS, history=[]) {
   if (!settings.greetings) return [];
   const day = dayOf(now), seed = [...day].reduce((n,c)=>n+c.charCodeAt(0),0);
   return ['morning','night'].flatMap(kind=>{
     const start = Date.parse(`${day}T${settings[kind]}:00+08:00`);
     const expires = Math.min(start + 90*60000, Date.parse(`${day}T22:00:00+08:00`));
     if (!(now >= start && now < expires)) return [];
-    return [{kind:'greeting',dedupe_key:`greeting:${day}:${kind}`,text:greetings[kind][seed%greetings[kind].length],source_title:kind==='morning'?'早安，小鲸鱼冒个泡':'晚安，明天再唠',created_at:new Date(start).toISOString(),expires_at:new Date(expires).toISOString()}];
+    const recent=history.filter(m=>m.kind==='greeting'&&m.dedupe_key?.endsWith(':'+kind)).sort((a,b)=>Date.parse(b.sent_at)-Date.parse(a.sent_at)).slice(0,3).map(m=>m.text);
+    const available=greetings[kind].filter(text=>!recent.includes(text));const pool=available.length?available:greetings[kind];
+    return [{kind:'greeting',dedupe_key:`greeting:${day}:${kind}`,text:pool[seed%pool.length],source_title:kind==='morning'?'早安，小鲸鱼冒个泡':'晚安，明天再唠',created_at:new Date(start).toISOString(),expires_at:new Date(expires).toISOString()}];
   });
 }
 export function deliveryDecision(candidate, history, settings, now, lastActivity = 0) {
