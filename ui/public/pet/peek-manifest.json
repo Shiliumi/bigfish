@@ -1,0 +1,39 @@
+{
+  "version": 1,
+  "assets": {
+    "right": {
+      "file": "peek-right-v2.png",
+      "width": 1254,
+      "height": 1254,
+      "bounds": [
+        403,
+        71,
+        1248,
+        1237
+      ]
+    },
+    "bottom": {
+      "file": "peek-bottom-v2.png",
+      "width": 1254,
+      "height": 1254,
+      "bounds": [
+        45,
+        75,
+        1235,
+        1206
+      ],
+      "edge_line": 1172.49
+    },
+    "top": {
+      "file": "peek-top-v2.png",
+      "width": 1182,
+      "height": 1330,
+      "bounds": [
+        152,
+        19,
+        1058,
+        1202
+      ]
+    }
+  }
+}

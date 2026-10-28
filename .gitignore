@@ -1,0 +1,66 @@
+# Private agent state, credentials, conversations, memories and browsing history
+/.hermes/
+/.runtime/
+/.setup/
+/data/
+/reports/
+/backups/
+.env
+.env.*
+!.env.example
+!.env.*.example
+*.key
+*.pem
+*.p12
+*.pfx
+*.mobileprovision
+credentials*.json
+secrets*.json
+auth.json
+cookies*.json
+*.db
+*.db-*
+*.sqlite
+*.sqlite3
+*.sqlite-*
+*.sqlite3-*
+*.log
+*.log.*
+
+# Dependencies and generated output
+node_modules/
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+coverage/
+*.tsbuildinfo
+/ui/dist/
+/desktop/build/
+*.app/
+*.app
+*.dmg
+*.zip
+*.tar
+*.tar.gz
+
+# Full-resolution pet videos are distributed as a checksummed Release asset.
+/ui/public/pet/*.mov
+/ui/public/pet/*.webm
+/ui/public/pet/*-preview.png
+
+# Local QA captures can contain private messages or account details.
+/desktop/*.png
+/desktop/*.mp4
+/ui/preview.png
+
+# Editor and operating-system files
+.DS_Store
+._*
+.idea/
+.vscode/
+*.swp
+*.swo
+*~

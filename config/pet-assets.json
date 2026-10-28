@@ -1,0 +1,149 @@
+{
+  "repository": "Shiliumi/bigfish",
+  "tag": "v1.6.0",
+  "asset": "bigfish-pet-v1.6.0.tar.gz",
+  "sha256": "0503ab65e1e898993eb583b857d91080656ec1eaf473ef839441fd5fb704f480",
+  "size": 259988043,
+  "files": {
+    "idle.mov": {
+      "size": 13615279,
+      "sha256": "f8b40bf9bc72b7da0123b9aedc1c3b6ddeba7b201d55525a785e7072bb133b7e"
+    },
+    "idle.webm": {
+      "size": 6090751,
+      "sha256": "3e61875f7287d2946de473a49af373320bba61d8a29e4c2cf94292546c0ac65b"
+    },
+    "thinking.mov": {
+      "size": 10088996,
+      "sha256": "8c3506fb70391406b073510e7e7cbfc2328cb2a642ef8c412767a605cd8c0956"
+    },
+    "thinking.webm": {
+      "size": 4567811,
+      "sha256": "5189e6f2207e36e39c34c4ffd13cab5507987d0d67ad1240e66713f9cb8c20a9"
+    },
+    "working.mov": {
+      "size": 10057836,
+      "sha256": "95087f7c2d12b5714a15a1ff7710e2ffdd2a4a5e532bc4f3eaddb61d9470a42d"
+    },
+    "working.webm": {
+      "size": 4336400,
+      "sha256": "d475f4e478e736f4e6fbda133ea054f9bebe414535e1940c33e5cd06199bf10e"
+    },
+    "greeting.mov": {
+      "size": 13660588,
+      "sha256": "ebe6c7fb7acf16d06bded59c6e79a9b5854a025cc8d448ae9e341d237d45531c"
+    },
+    "greeting.webm": {
+      "size": 6078283,
+      "sha256": "a0134237f1b3cf2ff624d1f154e42b463dcee6902b2cc1e972f6437726013b67"
+    },
+    "happy.mov": {
+      "size": 11497097,
+      "sha256": "de1dd615b9b82c991da25a1ccf6abe2b7906e5270ba0ba1984a45dadbbed30dc"
+    },
+    "happy.webm": {
+      "size": 4852518,
+      "sha256": "ccad14e16e062049f06fd6d026c682d0ce946054b9e04cdcf9b7c1e259f7188c"
+    },
+    "tickle.mov": {
+      "size": 9369087,
+      "sha256": "88d84926f14f526701233ed99445807058028df79f4a8e3649b4bdf22c67b144"
+    },
+    "tickle.webm": {
+      "size": 3631359,
+      "sha256": "37dd3d8497deb6d6b8464e5135ff6a6f96aa06f6e8bd3d3eff68f67393d54271"
+    },
+    "shy.mov": {
+      "size": 15280845,
+      "sha256": "d67d0f7f06ae71e32d71718504215f7d8316dd50b5d54b3cec8713e863ca41ac"
+    },
+    "shy.webm": {
+      "size": 6815877,
+      "sha256": "800091ec0486f3b5936c0be7c67782d8808202dcb3cf3927312f62f347182424"
+    },
+    "grumpy.mov": {
+      "size": 9445179,
+      "sha256": "171c2bfbb97821236069483c423be980c97a24f1da8dd7c5dd08f024d5ccd71e"
+    },
+    "grumpy.webm": {
+      "size": 3827782,
+      "sha256": "17ef59bd3a1b39040d6dea1d8905312f3768ffba0194f664656563c670bd4f0a"
+    },
+    "drag.mov": {
+      "size": 7932998,
+      "sha256": "fdcab2548c7491b57776300957e2373ea621eb207f587998b810bc1883c92c69"
+    },
+    "drag.webm": {
+      "size": 3210483,
+      "sha256": "d7dc51c4719a73fc5de7ab2b06d70d69538d7e3b7b41b246519623f1f5f1f002"
+    },
+    "sleep.mov": {
+      "size": 11052350,
+      "sha256": "16bf88073834626d7968c7a594c97f44406e3e4fb237851f3e35680ce332c86e"
+    },
+    "sleep.webm": {
+      "size": 4415219,
+      "sha256": "275e1fcfb8ed5f51d6cd29c7ef10c15eac8ff0115d966702b61a8a47f50f4571"
+    },
+    "yawn.mov": {
+      "size": 13259927,
+      "sha256": "53895411edc118d4dc3fb012efde86a516247f3fcadda24006eb5d89d5ac4276"
+    },
+    "yawn.webm": {
+      "size": 5646504,
+      "sha256": "34f239c6e24fff510f270eb7eed74296c23ed2f65d8b6a954d958864229d6603"
+    },
+    "stretch.mov": {
+      "size": 9875126,
+      "sha256": "33d26cb2a0f32fb61ea88b58ec9a96b7ac4a3a64a034a1193321aeb86babf1c2"
+    },
+    "stretch.webm": {
+      "size": 3774536,
+      "sha256": "09ea8ea15278a3776d4d70cf67adc2d96e8e786a09f6ef17627e91e7d82794d9"
+    },
+    "look.mov": {
+      "size": 10712191,
+      "sha256": "796d1461aa5824ba152e2fd4e97b56d90a87e5767fb800060196ebf9095a7286"
+    },
+    "look.webm": {
+      "size": 4287872,
+      "sha256": "bc9b8a0b9ab8b7273c6993e755da0d3f19dd87b3dba8135d52bed144f8173447"
+    },
+    "rice.mov": {
+      "size": 14469104,
+      "sha256": "6c32264f6203a68e518990175347cd7d0b01c8a4e77c6e30c82ca3c0c706a3de"
+    },
+    "rice.webm": {
+      "size": 6264391,
+      "sha256": "f8bc77fa457d9792cc9b4cf3f9070a73cdb19d3a4c9e488198db24532a6a4ffe"
+    },
+    "tail.mov": {
+      "size": 11968497,
+      "sha256": "222101216a57af68925513e27cd1d775feba79c2ad229ef660b45d194506a501"
+    },
+    "tail.webm": {
+      "size": 5059370,
+      "sha256": "15120e33041633a15b1e5eb55381a61113a9d3ad7190444c966b0f2a3f7a6154"
+    },
+    "celebrate.mov": {
+      "size": 10457415,
+      "sha256": "e52629b79a42de8cb9d749b73584932f6e0c260f73114a445f443ba376e76cfa"
+    },
+    "celebrate.webm": {
+      "size": 4360475,
+      "sha256": "fd598c3c99ad63e358313a9ea28b0b83de5cbdcc54f19cd21fdd367a60bbbfc6"
+    },
+    "ATTRIBUTION.md": {
+      "size": 1801,
+      "sha256": "1b119ffec13222a4964441310694952a1beed8dc7f988fad910633ccfe5d7cfe"
+    },
+    "LICENSE-ASSETS.txt": {
+      "size": 1032,
+      "sha256": "4bf893c865b174017f5d98e2b1277dfd561d3ee1a72f5fb43db9a99f1d99dbe3"
+    },
+    "LICENSE-CODE.txt": {
+      "size": 1069,
+      "sha256": "22757dc9c895b2729a2fc684d227cadfb54d5af3dd300029926839e8c4e269ce"
+    }
+  }
+}

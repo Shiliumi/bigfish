@@ -1,0 +1,13 @@
+#!/bin/bash
+set -euo pipefail
+FISH_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+export HERMES_HOME="$FISH_ROOT/.hermes"
+export HERMES_TIMEZONE=Asia/Shanghai
+export TZ=Asia/Shanghai
+cd "$FISH_ROOT"
+FISH_LAUNCHER="$FISH_ROOT/.runtime/hermes-agent/.hermes/bin/hermes"
+if [[ ! -f "$FISH_LAUNCHER" ]]; then
+  echo 'Hermes 尚未安装，请先完成安装。' >&2
+  exit 1
+fi
+exec "$FISH_LAUNCHER" "$@"

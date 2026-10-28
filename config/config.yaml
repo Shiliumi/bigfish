@@ -1,0 +1,55 @@
+model:
+  provider: deepseek
+  default: deepseek-flash
+  base_url: https://api.deepseek.com/v1
+
+terminal:
+  backend: local
+  cwd: "__PROJECT_ROOT__"
+  timeout: 60
+
+browser:
+  backend: browser-use
+  cloud_provider: local
+  use_real_profile: false
+  headed: false
+  user_data_dir: ""
+  inactivity_timeout: 120
+
+memory:
+  memory_enabled: true
+  user_profile_enabled: true
+  memory_char_limit: 6000
+  user_char_limit: 3000
+  nudge_interval: 5
+
+skills:
+  creation_nudge_interval: 15
+
+auxiliary:
+  background_review:
+    enabled: true
+    max_input_tokens: 24000
+
+agent:
+  max_turns: 24
+  run_budget_seconds: 300
+  reasoning_effort: medium
+
+cron:
+  catch_up_missed: false
+  max_parallel_jobs: 1
+  allow_agent_scheduling: false
+
+max_concurrent_sessions: 2
+
+platform_toolsets:
+  cli: [web, browser, file, terminal, memory, session_search, skills, cronjob]
+  cron: [web, browser, file, terminal, memory, session_search, skills]
+
+display:
+  language: zh-CN
+
+tool_loop_guardrails:
+  warnings_enabled: true
+  non_interactive_hard_stop_enabled: true
