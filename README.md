@@ -151,6 +151,14 @@ swiftc desktop/PetBehavior.swift scripts/test_pet_behavior.swift -o /tmp/bigfish
 
 桌宠改编自 [PC2005-cloud/dsh-pet](https://github.com/PC2005-cloud/dsh-pet)，角色设计来自 [上善无形](https://space.bilibili.com/4456176) 与 [ZipZipPipe](https://space.bilibili.com/4168597)，遵循 CC BY-NC-SA 4.0 及上游的非商业条件。头像与表情来自 [可以叫我云大人 / 雾雪](https://kiriyuki.com)，保留作者说明。探头图片是基于该角色参考的 AI 辅助补绘，仍按角色素材条件处理。
 
+## 1.14：接住前面的铺垫，没懂也不装懂
+
+- 接话说明补上当前会话的多轮铺垫、谐音和反话：新线索出现时回看前文，认出被逗后自然回应，不机械认领玩笑昵称，也不逐字科普。
+- 没接住就承认，理解晚了不说早已知道；对方想结束就收住。临时玩笑不作为改名、用户事实或持续事项，认真问题和真诚表达继续按当下请求处理。
+- 增加十组虚构对话回放及可选的实际模型对比脚本，使用真实后台额度，结果留在本机。小样本中仍有多层梗接不全、解释过长等问题，不能视为普遍提升或模型训练。详见 [多轮接话验证](docs/conversation-play.md)。
+
+已有安装执行 `python3 scripts/install_memory.py` 和 `python3 scripts/update_conversation_guide.py`，空闲时重载 gateway 插件、重启内部接口，退出应用后运行 `python3 scripts/build_app.py` 再打开。新对话加载完整说明；保留私人命名与成长区，无需重新设定模型或日常安排。
+
 ## 1.13：记得事情正在往前走
 
 - 「记忆空间」新增 **持续事项**：目标、待解决问题与约定，可以记录进展、暂停、完成、续留或遗忘。默认保留 90 天，最多二十件有效的进行中或暂停事项；保留时间不是事情的截止日期。相关聊天最多带两条当前状态，泛泛询问近况只带进行中的，不自行创建日程或催办。

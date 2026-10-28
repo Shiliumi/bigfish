@@ -1,6 +1,6 @@
 {
   "hermes_repository": "https://github.com/NousResearch/hermes-agent",
   "hermes_commit": "bf0203a794a07aac3ff764972ab9087baa4e4f4e",
-  "bigfish_version": "1.13.0",
+  "bigfish_version": "1.14.0",
   "macos_minimum": "13.0"
 }
