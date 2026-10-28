@@ -132,6 +132,8 @@ swiftc desktop/PetBehavior.swift scripts/test_pet_behavior.swift -o /tmp/bigfish
 
 对话效果的开发抽样见 [逐轮互动回放](docs/conversation-dialogues.md)：显式 `--live` 才调用配置的付费 API，材料使用公共模板与虚构对话，计入后台额度；实验候选不自动安装到人设，也不作为应用日常任务运行。
 
+另有 [本地语义检索隔离实验](docs/semantic-memory-study.md)，使用单独环境与虚构记忆比较漏召回、误召回和资源开销。向量模型与依赖是可选开发材料，正式应用没有接入。
+
 ## 数据与 Git 忽略规则
 
 | 路径 | 内容 | 上传 Git |

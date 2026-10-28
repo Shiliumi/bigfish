@@ -1,0 +1,4 @@
+# Optional isolated developer replay only; never required by the application.
+numpy==2.3.4
+onnxruntime==1.23.2
+tokenizers==0.22.1
