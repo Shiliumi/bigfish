@@ -15,6 +15,7 @@ from zoneinfo import ZoneInfo
 ROOT = Path(__file__).resolve().parents[1]
 UNSET = object()
 INDEX_VERSION = 2  # Bump when lexical/index rules change; derived entries then rebuild atomically.
+SCHEMA_VERSION = 1  # SQLite user_version; opening a ready store must not acquire a write lock.
 LOCAL_TZ = ZoneInfo('Asia/Shanghai')
 # Small, auditable spelling/equivalence rules, not generated semantic facts.
 EQUIVALENTS = (
@@ -155,8 +156,29 @@ class Journal:
         self.db = sqlite3.connect(path, timeout=8)
         path.chmod(0o600)
         self.db.row_factory = sqlite3.Row
-        self.db.execute('PRAGMA journal_mode=WAL')
-        self.db.executescript('''
+        try:
+            ready=self._ready()
+            self.db.execute('PRAGMA journal_mode=WAL')
+            if not ready:self._initialize()
+        except BaseException:
+            self.db.close()
+            raise
+
+    def _ready(self):
+        version=self.db.execute('PRAGMA user_version').fetchone()[0]
+        if version>SCHEMA_VERSION:raise ValueError('回忆库来自更新版本，请先更新应用；原数据未修改。')
+        if version!=SCHEMA_VERSION:return False
+        row=self.db.execute("SELECT value FROM journal_meta WHERE key='index_version'").fetchone()
+        if not row or row[0]!=str(INDEX_VERSION):return False
+        # Detect an older writer or interrupted derived-index update without changing source rows.
+        return self.db.execute("SELECT 1 FROM episodes WHERE status='active' AND (index_version!=? OR indexed_revision!=revision) LIMIT 1",(INDEX_VERSION,)).fetchone()is None
+
+    def _initialize(self):
+        with self.db:
+            self.db.execute('BEGIN IMMEDIATE')
+            # Another process may have completed the upgrade while this connection waited.
+            if self._ready():return
+            for statement in '''
             CREATE TABLE IF NOT EXISTS episodes (
                 id TEXT PRIMARY KEY, session_id TEXT NOT NULL, source_ref TEXT NOT NULL,
                 recorded_at TEXT NOT NULL, summary TEXT NOT NULL, excerpt TEXT NOT NULL,
@@ -181,9 +203,8 @@ class Journal:
                 turn_hash TEXT, episode_id TEXT, episode_fingerprint TEXT,
                 PRIMARY KEY(matter_id,revision)
             );
-        ''')
-        with self.db:
-            self.db.execute('BEGIN IMMEDIATE')
+            '''.split(';'):
+                if statement.strip():self.db.execute(statement)
             columns = {row[1] for row in self.db.execute('PRAGMA table_info(episodes)')}
             for name, definition in {'valid_from': 'TEXT', 'valid_until': 'TEXT', 'corrected_at': 'TEXT', 'correction_source': 'TEXT', 'kind': "TEXT NOT NULL DEFAULT 'event'",'aliases':"TEXT NOT NULL DEFAULT '[]'",'index_version':'INTEGER NOT NULL DEFAULT 0','indexed_revision':'INTEGER NOT NULL DEFAULT 0'}.items():
                 if name not in columns:
@@ -198,6 +219,7 @@ class Journal:
                     self._index(self.get(row['id']))
             for row in self.db.execute("SELECT * FROM episodes WHERE status='active' AND (index_version!=? OR indexed_revision!=revision)",(INDEX_VERSION,)).fetchall():self._index(dict(row))
             self.db.execute('INSERT OR REPLACE INTO journal_meta VALUES(?,?)',('index_version',str(INDEX_VERSION)))
+            self.db.execute('PRAGMA user_version='+str(SCHEMA_VERSION))
 
     def __enter__(self):
         return self

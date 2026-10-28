@@ -151,6 +151,12 @@ swiftc desktop/PetBehavior.swift scripts/test_pet_behavior.swift -o /tmp/bigfish
 
 桌宠改编自 [PC2005-cloud/dsh-pet](https://github.com/PC2005-cloud/dsh-pet)，角色设计来自 [上善无形](https://space.bilibili.com/4456176) 与 [ZipZipPipe](https://space.bilibili.com/4168597)，遵循 CC BY-NC-SA 4.0 及上游的非商业条件。头像与表情来自 [可以叫我云大人 / 雾雪](https://kiriyuki.com)，保留作者说明。探头图片是基于该角色参考的 AI 辅助补绘，仍按角色素材条件处理。
 
+## 1.14.1：读取回忆少争一把写锁
+
+已初始化、索引一致的回忆库不再在每次查询时重跑建表与版本写入；旧库升级和过期索引修复仍在事务内执行，失败回滚。虚构并发检查中，另一个写事务未提交时仍能读取已提交内容；固定回放的召回文本保持一致。本轮不增加面板、工具或模型调用，也不改变 token 输入。详见 [持续改进记录与验证](docs/research-2026-10-29.md)。
+
+已有安装执行 `python3 scripts/install_memory.py`，在空闲时重载 gateway 插件、重启内部接口；退出应用后构建新应用。无需重设人设、模型或日常任务。旧库首次打开会进行一次事务升级，运行中的数据库备份使用 SQLite 在线备份。
+
 ## 1.14：接住前面的铺垫，没懂也不装懂
 
 - 接话说明补上当前会话的多轮铺垫、谐音和反话：新线索出现时回看前文，认出被逗后自然回应，不机械认领玩笑昵称，也不逐字科普。
