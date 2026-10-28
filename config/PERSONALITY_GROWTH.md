@@ -4,6 +4,8 @@
 
 ## 冲浪时：先观察，不急着认领
 
+正常冲浪统一使用 `config/SURF_COMPLETE.md`：观察、问题及可选的一项 trial / feedback 放入同一收尾候选，由程序验证并生成编号。下列 record / trial / feedback 单项协议用于理解数据规则、手动修复与其他独立场景；不要与完整收尾重复执行。
+
 实际读完内容后，若有一个表达、笑点、看事情的角度或内容偏好值得留下，就记录“哪里有意思、我喜欢还是不喜欢、为什么”。每轮 0—3 条，没值得写的可以没有。不要记录大段原文、账号私人信息，也不要把只有标题的页面当样本。
 
 先把真实 URL、实际时间和报告路径写入 data/surf-state.json（字段沿用 url/title/read_at/report），再把候选 JSON 写到 data/personality/pending/本轮时间.json，运行 `python3 scripts/personality.py record 文件路径`。这个命令会核对已读记录和报告，成功后才进入 data/personality/observations.jsonl。不要直接编辑该笔记库或自填已通过的证据。

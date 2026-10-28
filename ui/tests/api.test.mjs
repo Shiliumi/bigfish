@@ -14,6 +14,15 @@ test('private data requires a local session cookie',async()=>{
   assert.equal((await fetch(BASE+'/api/companion')).status,401);
   assert.equal((await fetch(BASE+'/api/balance')).status,401);
   assert.equal((await fetch(BASE+'/api/model-settings')).status,401);
+  assert.equal((await fetch(BASE+'/api/budget')).status,401);
+});
+
+test('daily allowance is private, revision-safe and records no request contents',async()=>{
+ const before=await(await fetch(BASE+'/api/budget',{headers})).json();assert.equal(typeof before.settings.enabled,'boolean');assert.ok(Number.isInteger(before.settings.daily_tokens));assert.ok(Array.isArray(before.groups));
+ assert.ok(!('requests' in before));assert.ok(!JSON.stringify(before).includes('session_hash'));
+ const stale=await fetch(BASE+'/api/budget',{method:'PUT',headers,body:JSON.stringify({...before.settings,revision:-1})});assert.equal(stale.status,409);
+ const after=await(await fetch(BASE+'/api/budget',{headers})).json();assert.deepEqual(after.settings,before.settings);
+ assert.equal((await fetch(BASE+'/api/budget',{method:'PUT',headers:{...headers,Origin:'https://example.org'},body:'{}'})).status,403);
 });
 test('companion publishes only public runtime state',async()=>{
   const response=await fetch(BASE+'/api/companion',{headers});assert.equal(response.status,200);

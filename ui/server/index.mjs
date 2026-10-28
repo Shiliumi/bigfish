@@ -104,6 +104,8 @@ async function overview() {
 async function handleAPI(req,res,url) {
   authorize(req);const name=url.pathname;
   if(name==='/api/usage' && req.method==='GET') return json(res,200,await usage.snapshot(url.searchParams.get('days')));
+  if(name==='/api/budget' && req.method==='GET') return json(res,200,await learningScript(ROOT,'fish_budget.py',{action:'snapshot'}));
+  if(name==='/api/budget' && req.method==='PUT') {const data=await body(req);return json(res,200,await learningScript(ROOT,'fish_budget.py',{action:'settings',enabled:data.enabled,daily_tokens:data.daily_tokens,revision:data.revision}));}
   if(name==='/api/automation/settings' && req.method==='PUT') return json(res,200,await usage.saveSettings(await body(req)));
   if(name==='/api/episodes' && req.method==='GET') return json(res,200,await journal(ROOT,{q:(url.searchParams.get('q')||'').slice(0,200),scope:url.searchParams.get('scope')||'current',limit:30}));
   if(name==='/api/personality' && req.method==='GET') return json(res,200,await learningScript(ROOT,'personality.py',{action:'snapshot'}));

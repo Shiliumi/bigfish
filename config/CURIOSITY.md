@@ -6,20 +6,12 @@
 
 出发前执行 `python3 scripts/curiosity.py begin --thread 真实cur-id`；第一次找新东西用 `begin`（不带 thread）。只有 `started=true` 才出发，记住返回的 run.id。沿一个问题跟进：先找具体作品/作者/讨论，读到了有意思的再顺着它拐弯。允许停留、返回、嫌无聊换掉；不要为了“覆盖三个平台”频繁跳站。搜不到就别硬搜。
 
-真实观察通过 `scripts/personality.py record` 验证后，可以把一个**尚未解决、自己还想看**的问题放进 JSON 文件，再执行 `curiosity.py remember 文件`：
+实际读完后，按 `config/SURF_COMPLETE.md` 把真实报告、已读页面、0–3 条观察、想继续看的问题、结局和可选分享放入一个 JSON，执行一次 `python3 scripts/surf_complete.py 实际候选路径`。程序生成 obs-id 并验证问题依据，不要再分别 record / remember / finish 或手写已读清单与 outbox。
 
-```json
-[{"question":"用自己的话写，具体还想看什么？","why":"这一点哪里勾住了我，为什么还没看够？","evidence_ids":["obs-真实id"],"interest":2}]
-```
+临时好奇可以只来自一条扎实观察，不等于成熟人格；不要为了显得有个性认领固定爱好。最多八个未完问题，可以失去兴趣。沿用旧问题时提供真实 cur-id，不接受臆造观看时长、点赞或登录数据。
 
-临时好奇可以只来自一条扎实观察，不等于成熟人格；不要为了显得有个性认领固定爱好。最多八个未完问题，可失去兴趣。remember 只能引用已核对的观察，不接受臆造观看时长/点赞/登录数据。
+outcome：want_more（本轮新证据支撑继续追看）、satisfied（看够了，放两天）、bored（没意思，收掉）、blocked（访问受限，歇八小时，不当作不喜欢）。want_more 需要本轮报告里的新观察；其他结尾不强迫形成观察。没有读到内容时只写真实阻挡原因。给爸爸的来信作为同一候选中的可选 share，继续遵循 SHARING.md；没话想说就不发。
 
-收尾 JSON 后执行 `curiosity.py finish 文件`：
-
-```json
-{"run_id":"begin返回的browse-id","outcome":"want_more","reason":"新读到的具体细节让我还想追什么；不写空泛的很有趣","report_path":"reports/真实日期/本轮-surf.md","evidence_ids":["本轮新记录的obs-id"]}
-```
-
-outcome：want_more（本轮新证据支撑继续追看）、satisfied（看够了，放两天）、bored（没意思，收掉）、blocked（访问受限，歇八小时，不当作不喜欢）。want_more 需要本轮报告里的新观察；其他结尾不强迫形成观察。报告只留来源、真正看见的内容、自己的反应和未完问题，供自己以后接着看。给爸爸的来信另按 SHARING.md，没话想说就不发。
+相同候选可安全重试，提交失败不声称成功；保留原候选和收尾记录以便恢复。单项 curiosity / personality 工具仍用于手动修复和其他独立场景，正常冲浪统一走完整收尾。
 
 agenda 中的 trial_preferences 是最近自己的试行偏好，不是必须执行的清单。可以自然沿着它找新内容，也可以觉得不合口味或换方向。真的跟进后才用新观察反馈，不能为了让偏好成熟而刷相同来源。访问受阻不等于不喜欢。

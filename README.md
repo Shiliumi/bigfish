@@ -54,6 +54,7 @@ less .setup/install-hermes.sh
 HERMES_HOME="$PWD/.hermes" HERMES_INSTALL_DIR="$PWD/.runtime/hermes-agent" bash .setup/install-hermes.sh --commit bf0203a794a07aac3ff764972ab9087baa4e4f4e --skip-setup
 python3 scripts/setup_profile.py
 python3 scripts/install_memory.py --activate
+python3 scripts/install_budget.py
 ```
 
 安装器可能下载自己的 Python、Node 和浏览器依赖，具体要求见 [Hermes 安装文档](https://hermes-agent.nousresearch.com/docs/getting-started/installation)。运行时不随仓库分发。不要在已有使用数据的目录中重复应用初始模板：`setup_profile.py` 会覆盖当前配置及手动人设，保留核心记忆、密钥和已形成的自动成长区。
@@ -149,6 +150,24 @@ swiftc desktop/PetBehavior.swift scripts/test_pet_behavior.swift -o /tmp/bigfish
 形象、动画与表情均保留各自作者及使用条件；自编代码尚未单独指定开源许可证。第三方 MIT 代码的许可证原文也保留在仓库。详见 [第三方说明](THIRD_PARTY.md)、[图标署名](desktop/assets/ATTRIBUTION.md)、[桌宠素材署名](ui/public/pet/ATTRIBUTION.md) 及 [参考项目](REFERENCES.md)。
 
 桌宠改编自 [PC2005-cloud/dsh-pet](https://github.com/PC2005-cloud/dsh-pet)，角色设计来自 [上善无形](https://space.bilibili.com/4456176) 与 [ZipZipPipe](https://space.bilibili.com/4168597)，遵循 CC BY-NC-SA 4.0 及上游的非商业条件。头像与表情来自 [可以叫我云大人 / 雾雪](https://kiriyuki.com)，保留作者说明。探头图片是基于该角色参考的 AI 辅助补绘，仍按角色素材条件处理。
+
+## 1.9：后台有额度，冲浪一次收好
+
+- 「鱼塘控制室 → 鱼粮账本」新增每日后台 token 额度，首次安装默认启用 200 万，可调整或关闭。覆盖本应用 Hermes 的全部 cron 定时任务，包括自行添加的任务；聊天主请求独立记录，不被此额度拦截。原来的活动暂停开关仍只控制项目自带的冲浪和整理。
+- 主后台请求通过 Hermes 的 `llm_execution` 扩展先原子预留，再调用供应商，成功后按实际用量结算、退回差额。跨进程共享额度；失联和未知用量暂按预留消耗，不按零计算。每日北京时间零点重新计额，按请求开始日归属。额度包含输入（含缓存）及输出，推理不重复相加；这是总 token 活动额度，不是金额或供应商硬封顶。
+- 主后台单次输出最多 8,192 token，并保留原请求的工具与推理消息。UTF-8 文本字节加输出上限作为保守预留，可能因剩余额度不足而提前停止；不为补写收尾自动追加模型调用。辅助调用使用原生观察钩子记账，能够归属 cron 的计入后台；会话标题和对话后的复盘按用途计入后台，即使由聊天触发；其他聊天辅助保持独立。该接口不能逐次拦截辅助调用。归属未知的单列，在途、辅助、底层隐藏重试和未返回的用量仍可能超额，最终以供应商账单为准。
+- 新账本从安装启用后开始记录，不导入已有消耗。只保存随机请求编号、时间、来源、用途、模型标识、token 桶、状态和会话编号哈希；不保存提示、回复、密钥、地址和原始工具数据。缺少 usage 显示未知。
+- `scripts/surf_complete.py` 将一轮的报告、已读记录、观察、未完问题、可选人格反馈、结局与来信候选统一验证提交。程序串联真实编号，减少模型分别写文件、调用工具和修正引用的往返。相同出发与候选可重试；中断保留可恢复记录，冲突停止覆盖，来信最后排队，避免重复投递。没有成功读到正文时只能记录受阻，不制造发现。
+
+升级已有安装：
+
+```bash
+npm run build --prefix ui
+python3 scripts/install_budget.py
+python3 scripts/setup_jobs.py
+```
+
+预算扩展安装到私有 `.hermes/plugins/fish-budget/`；需要在任务与聊天空闲时重启项目 Hermes 内部接口及 gateway，随后重新打开应用。源码不修改固定的 Hermes 上游。首次启用会影响自行添加的 cron 的后续模型请求，请在账本中按实际使用调整额度；已有任务定义保留。请求账本 `data/automation/requests.sqlite3`、收尾恢复记录 `data/surf-completions/` 均被 Git 忽略，可能包含私有状态。完整候选协议见 [SURF_COMPLETE.md](config/SURF_COMPLETE.md)。目前只验证了流程与故障边界，尚未测得日常费用下降比例。
 
 ## 1.8：可以纠错的回忆，有观察期的偏好
 

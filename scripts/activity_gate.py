@@ -100,6 +100,11 @@ def evaluate(root, mode, now=None, persist=True):
                 write(root / f"data/automation/reviews/{batch['id']}.json", batch)
         else:
             decision['reason'] = '没有尚未整理的新内容，本次不调用模型。'
+    if decision['wakeAgent']:
+        from fish_budget import Budget
+        with Budget(root,now=now) as ledger: budget=ledger.snapshot()
+        if budget['settings']['enabled'] and budget['remaining']<10_000:
+            decision.update(wakeAgent=False,reason='今日后台鱼粮不足以再出发，等明天或调整额度；聊天仍可使用。')
     if persist:
         decision['lease_until'] = (now + timedelta(minutes=20)).isoformat() if decision['wakeAgent'] else previous.get('lease_until')
         decision['skipped_ticks'] = previous.get('skipped_ticks', 0) + int(not decision['wakeAgent'])
