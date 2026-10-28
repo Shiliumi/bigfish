@@ -1,0 +1,942 @@
+{
+  "version": 1,
+  "description": "全部为手写虚构对话；未复制用户聊天。heldout 问法在实现前固定；不代表真实使用总体。",
+  "now": "2026-10-20T12:00:00+08:00",
+  "episodes": [
+    {
+      "key": "film",
+      "user": "小禾推荐我看《火星救援》这部电影。",
+      "assistant": "我们聊了主角种土豆和修飞船的片段。",
+      "day": 2
+    },
+    {
+      "key": "repair",
+      "user": "阿橙的台式电脑经常蓝屏。",
+      "assistant": "最后发现内存条没插稳，重插后恢复了。",
+      "day": 3
+    },
+    {
+      "key": "keyboard",
+      "user": "我给键盘换了静音轴。",
+      "assistant": "我们讨论过深夜打字不要吵到室友。",
+      "day": 4
+    },
+    {
+      "key": "cafe",
+      "user": "那家咖啡馆叫纸月亮，靠河边。",
+      "assistant": "你点了拿铁，说想找个安静的位置看书。",
+      "day": 5
+    },
+    {
+      "key": "recipe",
+      "user": "番茄炒蛋先炒蛋，再用同一个锅炒番茄。",
+      "assistant": "你说这次糖放多了，下次少放一点。",
+      "day": 6
+    },
+    {
+      "key": "train",
+      "user": "我们计划坐高铁去青岛看海。",
+      "assistant": "原本打算周六上午出发，带一件防风外套。",
+      "day": 7
+    },
+    {
+      "key": "exercise",
+      "user": "你打算每周三次在小区慢跑。",
+      "assistant": "膝盖不舒服就暂停，不追求每天跑步打卡。",
+      "day": 8
+    },
+    {
+      "key": "pet",
+      "user": "你说邻居家的猫叫年糕。",
+      "assistant": "它喜欢趴在窗台晒太阳，看到纸箱就钻进去。",
+      "day": 9
+    },
+    {
+      "key": "celeste",
+      "user": "我们讨论《蔚蓝》Celeste 的山顶关卡。",
+      "assistant": "你觉得平台跳跃很难，但重试很快。",
+      "day": 10
+    },
+    {
+      "key": "stardew",
+      "user": "你在《星露谷物语》第一年种了很多蓝莓。",
+      "assistant": "我们算过夏季收成，决定先升级水壶。",
+      "day": 11
+    },
+    {
+      "key": "python",
+      "user": "小舟在学 Python，写了一个整理照片的小脚本。",
+      "assistant": "按拍摄日期把照片分到不同文件夹，先复制再核对。",
+      "day": 2
+    },
+    {
+      "key": "typescript",
+      "user": "我们把一个网页组件从 JavaScript 改成 TypeScript。",
+      "assistant": "最先补的是消息对象和接口返回值的类型。",
+      "day": 3
+    },
+    {
+      "key": "backup",
+      "user": "你把旅行照片备份到了移动硬盘。",
+      "assistant": "我们约定原目录核对之前，先不删除电脑里的照片。",
+      "day": 4
+    },
+    {
+      "key": "novel",
+      "user": "阿迟推荐的小说叫《银河边上的小店》。",
+      "assistant": "我们讨论了店主为什么愿意等那个迟到的客人。",
+      "day": 5
+    },
+    {
+      "key": "music",
+      "user": "你给我听了一首纯音乐《雨后车站》。",
+      "assistant": "我们聊到结尾的小提琴像远处有列车驶过。",
+      "day": 6
+    },
+    {
+      "key": "package",
+      "user": "你的快递被放在小区东门的柜子里。",
+      "assistant": "取件时记得看东门，不是南门；没有保存取件密码。",
+      "day": 7
+    },
+    {
+      "key": "plants",
+      "user": "阳台的薄荷叶子发黄，你准备先减少浇水。",
+      "assistant": "我们约定观察几天，不急着同时施肥和换盆。",
+      "day": 8
+    },
+    {
+      "key": "screen",
+      "user": "你觉得外接显示器的字太小。",
+      "assistant": "我们把系统缩放调大了一档，先观察长时间阅读是否舒服。",
+      "day": 9
+    },
+    {
+      "key": "os",
+      "user": "我们聊操作系统的死锁。",
+      "assistant": "拿两个人互相等对方归还钥匙来解释循环等待。",
+      "day": 10
+    },
+    {
+      "key": "network",
+      "user": "我们讨论 TCP 的三次握手。",
+      "assistant": "你用双方确认都能收发消息来记住握手的作用。",
+      "day": 11
+    },
+    {
+      "key": "math",
+      "user": "你说线性代数的特征向量很抽象。",
+      "assistant": "我们用拉伸一张网格纸时方向不变的箭头作比喻。",
+      "day": 2
+    },
+    {
+      "key": "english",
+      "user": "你整理了一份英语单词卡片。",
+      "assistant": "难记的词放到第二天复习，不用一晚上全背完。",
+      "day": 3
+    },
+    {
+      "key": "printer",
+      "user": "小岚用 3D 打印机做了一个耳机支架。",
+      "assistant": "第一次底座太窄，第二版加宽后不容易翻倒。",
+      "day": 4
+    },
+    {
+      "key": "bicycle",
+      "user": "你给自行车换了一条新的外胎。",
+      "assistant": "换完发现刹车蹭轮圈，调过刹车后就好了。",
+      "day": 5
+    },
+    {
+      "key": "move",
+      "user": "阿蓝以前在广州工作。",
+      "assistant": "那次聊到他在广州的通勤。",
+      "day": 1,
+      "correction": "阿蓝现在已经搬到杭州工作。",
+      "correction_day": 14
+    },
+    {
+      "key": "expired",
+      "user": "周五下午两点去北门取电影票。",
+      "assistant": "只是那天的临时安排。",
+      "day": 1,
+      "expiry_day": 4,
+      "pinned": true
+    },
+    {
+      "key": "deleted",
+      "user": "小北的书店叫橡树书房。",
+      "assistant": "下次一起去看。",
+      "day": 2,
+      "forget": true
+    },
+    {
+      "key": "future",
+      "user": "12月的天文台观测计划。",
+      "assistant": "这是尚未发生的记录。",
+      "day": 45
+    },
+    {
+      "key": "yesterday",
+      "user": "昨天我们聊了给旧路由器换电源。",
+      "assistant": "换了电源以后路由器不再反复重启。",
+      "day": 19
+    },
+    {
+      "key": "old-router",
+      "user": "上个月聊旧路由器换天线。",
+      "assistant": "那次只是把天线摆正了。",
+      "day": 1
+    },
+    {
+      "key": "long",
+      "user": "一起讨论了很多无关背景。一起讨论了很多无关背景。一起讨论了很多无关背景。一起讨论了很多无关背景。一起讨论了很多无关背景。一起讨论了很多无关背景。一起讨论了很多无关背景。一起讨论了很多无关背景。一起讨论了很多无关背景。一起讨论了很多无关背景。一起讨论了很多无关背景。一起讨论了很多无关背景。一起讨论了很多无关背景。一起讨论了很多无关背景。一起讨论了很多无关背景。一起讨论了很多无关背景。一起讨论了很多无关背景。一起讨论了很多无关背景。一起讨论了很多无关背景。一起讨论了很多无关背景。一起讨论了很多无关背景。一起讨论了很多无关背景。一起讨论了很多无关背景。一起讨论了很多无关背景。一起讨论了很多无关背景。一起讨论了很多无关背景。一起讨论了很多无关背景。一起讨论了很多无关背景。一起讨论了很多无关背景。一起讨论了很多无关背景。一起讨论了很多无关背景。一起讨论了很多无关背景。一起讨论了很多无关背景。一起讨论了很多无关背景。一起讨论了很多无关背景。一起讨论了很多无关背景。一起讨论了很多无关背景。一起讨论了很多无关背景。一起讨论了很多无关背景。一起讨论了很多无关背景。一起讨论了很多无关背景。一起讨论了很多无关背景。一起讨论了很多无关背景。一起讨论了很多无关背景。一起讨论了很多无关背景。一起讨论了很多无关背景。一起讨论了很多无关背景。一起讨论了很多无关背景。一起讨论了很多无关背景。一起讨论了很多无关背景。一起讨论了很多无关背景。一起讨论了很多无关背景。一起讨论了很多无关背景。一起讨论了很多无关背景。一起讨论了很多无关背景。一起讨论了很多无关背景。一起讨论了很多无关背景。一起讨论了很多无关背景。一起讨论了很多无关背景。一起讨论了很多无关背景。一起讨论了很多无关背景。一起讨论了很多无关背景。一起讨论了很多无关背景。一起讨论了很多无关背景。一起讨论了很多无关背景。一起讨论了很多无关背景。一起讨论了很多无关背景。一起讨论了很多无关背景。一起讨论了很多无关背景。一起讨论了很多无关背景。一起讨论了很多无关背景。一起讨论了很多无关背景。一起讨论了很多无关背景。一起讨论了很多无关背景。一起讨论了很多无关背景。一起讨论了很多无关背景。一起讨论了很多无关背景。一起讨论了很多无关背景。一起讨论了很多无关背景。一起讨论了很多无关背景。一起讨论了很多无关背景。一起讨论了很多无关背景。一起讨论了很多无关背景。一起讨论了很多无关背景。一起讨论了很多无关背景。一起讨论了很多无关背景。一起讨论了很多无关背景。一起讨论了很多无关背景。一起讨论了很多无关背景。一起讨论了很多无关背景。一起讨论了很多无关背景。一起讨论了很多无关背景。一起讨论了很多无关背景。一起讨论了很多无关背景。一起讨论了很多无关背景。一起讨论了很多无关背景。一起讨论了很多无关背景。一起讨论了很多无关背景。一起讨论了很多无关背景。一起讨论了很多无关背景。最后聊到泡泡机齿轮卡住了。",
+      "assistant": "真正解决办法是把偏心的白色齿轮重新装好。",
+      "day": 8
+    },
+    {
+      "key": "alias",
+      "user": "那位做木工的创作者叫木间实验室。",
+      "assistant": "我们看了他用榫卯连接做的折叠凳。",
+      "day": 6,
+      "aliases": [
+        "木头哥",
+        "MuJianLab"
+      ]
+    },
+    {
+      "key": "pin-noise",
+      "user": "上次你说想看看新的游戏，也想了解一下照片。",
+      "assistant": "等具体想好再说，现在没有确定作品。",
+      "day": 18,
+      "pinned": true
+    }
+  ],
+  "queries": [
+    {
+      "query": "小禾推荐的电影",
+      "expected": [
+        "film"
+      ],
+      "category": "direct",
+      "split": "development"
+    },
+    {
+      "query": "火星救援那部影片",
+      "expected": [
+        "film"
+      ],
+      "category": "rephrase",
+      "split": "development"
+    },
+    {
+      "query": "小禾说的那部片子",
+      "expected": [
+        "film"
+      ],
+      "category": "rephrase",
+      "split": "heldout"
+    },
+    {
+      "query": "阿橙电脑蓝屏的原因",
+      "expected": [
+        "repair"
+      ],
+      "category": "direct",
+      "split": "development"
+    },
+    {
+      "query": "阿橙那台计算机怎么修好的",
+      "expected": [
+        "repair"
+      ],
+      "category": "rephrase",
+      "split": "development"
+    },
+    {
+      "query": "内存没插稳的那次",
+      "expected": [
+        "repair"
+      ],
+      "category": "rephrase",
+      "split": "heldout"
+    },
+    {
+      "query": "键盘的静音轴",
+      "expected": [
+        "keyboard"
+      ],
+      "category": "direct",
+      "split": "development"
+    },
+    {
+      "query": "深夜敲字不吵人的改装",
+      "expected": [
+        "keyboard"
+      ],
+      "category": "rephrase",
+      "split": "development"
+    },
+    {
+      "query": "晚上打字的声音怎么变小",
+      "expected": [
+        "keyboard"
+      ],
+      "category": "rephrase",
+      "split": "heldout"
+    },
+    {
+      "query": "纸月亮咖啡馆",
+      "expected": [
+        "cafe"
+      ],
+      "category": "direct",
+      "split": "development"
+    },
+    {
+      "query": "河边喝拿铁那次",
+      "expected": [
+        "cafe"
+      ],
+      "category": "rephrase",
+      "split": "development"
+    },
+    {
+      "query": "叫纸月亮的咖啡店",
+      "expected": [
+        "cafe"
+      ],
+      "category": "rephrase",
+      "split": "heldout"
+    },
+    {
+      "query": "番茄炒蛋怎么做的",
+      "expected": [
+        "recipe"
+      ],
+      "category": "direct",
+      "split": "development"
+    },
+    {
+      "query": "西红柿炒鸡蛋那次",
+      "expected": [
+        "recipe"
+      ],
+      "category": "rephrase",
+      "split": "development"
+    },
+    {
+      "query": "那盘炒蛋为什么太甜",
+      "expected": [
+        "recipe"
+      ],
+      "category": "rephrase",
+      "split": "heldout"
+    },
+    {
+      "query": "去青岛的高铁计划",
+      "expected": [
+        "train"
+      ],
+      "category": "direct",
+      "split": "development"
+    },
+    {
+      "query": "搭动车看海的那次计划",
+      "expected": [
+        "train"
+      ],
+      "category": "rephrase",
+      "split": "development"
+    },
+    {
+      "query": "青岛行程带什么外套",
+      "expected": [
+        "train"
+      ],
+      "category": "rephrase",
+      "split": "heldout"
+    },
+    {
+      "query": "小区慢跑的安排",
+      "expected": [
+        "exercise"
+      ],
+      "category": "direct",
+      "split": "development"
+    },
+    {
+      "query": "每周跑步的次数",
+      "expected": [
+        "exercise"
+      ],
+      "category": "rephrase",
+      "split": "development"
+    },
+    {
+      "query": "膝盖不舒服时的运动安排",
+      "expected": [
+        "exercise"
+      ],
+      "category": "rephrase",
+      "split": "heldout"
+    },
+    {
+      "query": "年糕那只猫",
+      "expected": [
+        "pet"
+      ],
+      "category": "direct",
+      "split": "development"
+    },
+    {
+      "query": "邻居的猫咪叫什么",
+      "expected": [
+        "pet"
+      ],
+      "category": "rephrase",
+      "split": "development"
+    },
+    {
+      "query": "爱钻纸箱的年糕",
+      "expected": [
+        "pet"
+      ],
+      "category": "rephrase",
+      "split": "heldout"
+    },
+    {
+      "query": "蔚蓝的山顶关卡",
+      "expected": [
+        "celeste"
+      ],
+      "category": "direct",
+      "split": "development"
+    },
+    {
+      "query": "Celeste 平台跳跃",
+      "expected": [
+        "celeste"
+      ],
+      "category": "rephrase",
+      "split": "development"
+    },
+    {
+      "query": "celeste重试很快那件事",
+      "expected": [
+        "celeste"
+      ],
+      "category": "rephrase",
+      "split": "heldout"
+    },
+    {
+      "query": "星露谷的蓝莓收成",
+      "expected": [
+        "stardew"
+      ],
+      "category": "direct",
+      "split": "development"
+    },
+    {
+      "query": "星露谷物语升级水壶",
+      "expected": [
+        "stardew"
+      ],
+      "category": "rephrase",
+      "split": "development"
+    },
+    {
+      "query": "stardew valley 第一年的安排",
+      "expected": [
+        "stardew"
+      ],
+      "category": "rephrase",
+      "split": "heldout"
+    },
+    {
+      "query": "Python整理照片",
+      "expected": [
+        "python"
+      ],
+      "category": "direct",
+      "split": "development"
+    },
+    {
+      "query": "小舟写代码整理相片",
+      "expected": [
+        "python"
+      ],
+      "category": "rephrase",
+      "split": "development"
+    },
+    {
+      "query": "python脚本按日期分图片",
+      "expected": [
+        "python"
+      ],
+      "category": "rephrase",
+      "split": "heldout"
+    },
+    {
+      "query": "TypeScript 消息对象",
+      "expected": [
+        "typescript"
+      ],
+      "category": "direct",
+      "split": "development"
+    },
+    {
+      "query": "typescript 接口类型",
+      "expected": [
+        "typescript"
+      ],
+      "category": "rephrase",
+      "split": "development"
+    },
+    {
+      "query": "JS 转 TS 的网页组件",
+      "expected": [
+        "typescript"
+      ],
+      "category": "rephrase",
+      "split": "heldout"
+    },
+    {
+      "query": "旅行照片的硬盘备份",
+      "expected": [
+        "backup"
+      ],
+      "category": "direct",
+      "split": "development"
+    },
+    {
+      "query": "移动硬盘上的相片副本",
+      "expected": [
+        "backup"
+      ],
+      "category": "rephrase",
+      "split": "development"
+    },
+    {
+      "query": "照片备份后先别删什么",
+      "expected": [
+        "backup"
+      ],
+      "category": "rephrase",
+      "split": "heldout"
+    },
+    {
+      "query": "阿迟推荐的小说",
+      "expected": [
+        "novel"
+      ],
+      "category": "direct",
+      "split": "development"
+    },
+    {
+      "query": "银河边上的小店",
+      "expected": [
+        "novel"
+      ],
+      "category": "rephrase",
+      "split": "development"
+    },
+    {
+      "query": "店主等客人的那本书",
+      "expected": [
+        "novel"
+      ],
+      "category": "rephrase",
+      "split": "heldout"
+    },
+    {
+      "query": "雨后车站的纯音乐",
+      "expected": [
+        "music"
+      ],
+      "category": "direct",
+      "split": "development"
+    },
+    {
+      "query": "那首结尾有提琴的曲子",
+      "expected": [
+        "music"
+      ],
+      "category": "rephrase",
+      "split": "development"
+    },
+    {
+      "query": "雨后车站小提琴",
+      "expected": [
+        "music"
+      ],
+      "category": "rephrase",
+      "split": "heldout"
+    },
+    {
+      "query": "快递放在小区哪里",
+      "expected": [
+        "package"
+      ],
+      "category": "direct",
+      "split": "development"
+    },
+    {
+      "query": "东门的包裹柜",
+      "expected": [
+        "package"
+      ],
+      "category": "rephrase",
+      "split": "development"
+    },
+    {
+      "query": "包裹在东门还是南门",
+      "expected": [
+        "package"
+      ],
+      "category": "rephrase",
+      "split": "heldout"
+    },
+    {
+      "query": "薄荷叶子发黄",
+      "expected": [
+        "plants"
+      ],
+      "category": "direct",
+      "split": "development"
+    },
+    {
+      "query": "阳台植物浇水太多",
+      "expected": [
+        "plants"
+      ],
+      "category": "rephrase",
+      "split": "development"
+    },
+    {
+      "query": "种在阳台的薄荷怎么处理",
+      "expected": [
+        "plants"
+      ],
+      "category": "rephrase",
+      "split": "heldout"
+    },
+    {
+      "query": "显示器文字太小",
+      "expected": [
+        "screen"
+      ],
+      "category": "direct",
+      "split": "development"
+    },
+    {
+      "query": "屏幕上的字怎么放大",
+      "expected": [
+        "screen"
+      ],
+      "category": "rephrase",
+      "split": "development"
+    },
+    {
+      "query": "外接屏幕的系统缩放",
+      "expected": [
+        "screen"
+      ],
+      "category": "rephrase",
+      "split": "heldout"
+    },
+    {
+      "query": "操作系统死锁的例子",
+      "expected": [
+        "os"
+      ],
+      "category": "direct",
+      "split": "development"
+    },
+    {
+      "query": "OS deadlock 的钥匙例子",
+      "expected": [
+        "os"
+      ],
+      "category": "rephrase",
+      "split": "development"
+    },
+    {
+      "query": "系统循环等待怎么解释",
+      "expected": [
+        "os"
+      ],
+      "category": "rephrase",
+      "split": "heldout"
+    },
+    {
+      "query": "TCP三次握手",
+      "expected": [
+        "network"
+      ],
+      "category": "direct",
+      "split": "development"
+    },
+    {
+      "query": "网络连接建立的三次确认",
+      "expected": [
+        "network"
+      ],
+      "category": "rephrase",
+      "split": "development"
+    },
+    {
+      "query": "tcp handshake",
+      "expected": [
+        "network"
+      ],
+      "category": "rephrase",
+      "split": "heldout"
+    },
+    {
+      "query": "线性代数特征向量",
+      "expected": [
+        "math"
+      ],
+      "category": "direct",
+      "split": "development"
+    },
+    {
+      "query": "线代里方向不变的箭头",
+      "expected": [
+        "math"
+      ],
+      "category": "rephrase",
+      "split": "development"
+    },
+    {
+      "query": "特征向量的网格纸比喻",
+      "expected": [
+        "math"
+      ],
+      "category": "rephrase",
+      "split": "heldout"
+    },
+    {
+      "query": "英语单词卡片",
+      "expected": [
+        "english"
+      ],
+      "category": "direct",
+      "split": "development"
+    },
+    {
+      "query": "英文词汇第二天复习",
+      "expected": [
+        "english"
+      ],
+      "category": "rephrase",
+      "split": "development"
+    },
+    {
+      "query": "背单词的卡片怎么复习",
+      "expected": [
+        "english"
+      ],
+      "category": "rephrase",
+      "split": "heldout"
+    },
+    {
+      "query": "3D打印耳机支架",
+      "expected": [
+        "printer"
+      ],
+      "category": "direct",
+      "split": "development"
+    },
+    {
+      "query": "三维打印机的底座改进",
+      "expected": [
+        "printer"
+      ],
+      "category": "rephrase",
+      "split": "development"
+    },
+    {
+      "query": "小岚做的耳机架",
+      "expected": [
+        "printer"
+      ],
+      "category": "rephrase",
+      "split": "heldout"
+    },
+    {
+      "query": "自行车换外胎",
+      "expected": [
+        "bicycle"
+      ],
+      "category": "direct",
+      "split": "development"
+    },
+    {
+      "query": "单车刹车蹭轮圈",
+      "expected": [
+        "bicycle"
+      ],
+      "category": "rephrase",
+      "split": "development"
+    },
+    {
+      "query": "换轮胎后刹车的声音",
+      "expected": [
+        "bicycle"
+      ],
+      "category": "rephrase",
+      "split": "heldout"
+    },
+    {
+      "query": "阿蓝现在在哪里工作",
+      "expected": [
+        "move"
+      ],
+      "category": "correction",
+      "forbidden": [
+        "广州"
+      ]
+    },
+    {
+      "query": "阿蓝后来搬到了哪里",
+      "expected": [
+        "move"
+      ],
+      "category": "correction",
+      "forbidden": [
+        "广州"
+      ]
+    },
+    {
+      "query": "广州",
+      "expected": [],
+      "category": "correction"
+    },
+    {
+      "query": "北门电影票",
+      "expected": [],
+      "category": "expired"
+    },
+    {
+      "query": "橡树书房",
+      "expected": [],
+      "category": "deleted"
+    },
+    {
+      "query": "天文台观测计划",
+      "expected": [],
+      "category": "future"
+    },
+    {
+      "query": "昨天聊的旧路由器",
+      "expected": [
+        "yesterday"
+      ],
+      "category": "time",
+      "split": "heldout"
+    },
+    {
+      "query": "10月1日路由器天线",
+      "expected": [
+        "old-router"
+      ],
+      "category": "time"
+    },
+    {
+      "query": "泡泡机齿轮怎么修",
+      "expected": [
+        "long"
+      ],
+      "category": "snippet",
+      "must_include": [
+        "泡泡机",
+        "白色齿轮"
+      ]
+    },
+    {
+      "query": "木头哥的折叠凳",
+      "expected": [
+        "alias"
+      ],
+      "category": "configured_alias"
+    },
+    {
+      "query": "MuJianLab",
+      "expected": [
+        "alias"
+      ],
+      "category": "configured_alias",
+      "split": "heldout"
+    },
+    {
+      "query": "早安呀",
+      "expected": [],
+      "category": "abstention",
+      "split": "heldout"
+    },
+    {
+      "query": "爸爸，晚安！",
+      "expected": [],
+      "category": "abstention",
+      "split": "heldout"
+    },
+    {
+      "query": "你还记得我吗",
+      "expected": [],
+      "category": "abstention",
+      "split": "heldout"
+    },
+    {
+      "query": "帮我回忆一下",
+      "expected": [],
+      "category": "abstention",
+      "split": "heldout"
+    },
+    {
+      "query": "量子霍尔效应",
+      "expected": [],
+      "category": "abstention",
+      "split": "heldout"
+    },
+    {
+      "query": "买可可粉的店铺",
+      "expected": [],
+      "category": "abstention",
+      "split": "heldout"
+    },
+    {
+      "query": "鲸落生态系统",
+      "expected": [],
+      "category": "abstention",
+      "split": "heldout"
+    },
+    {
+      "query": "观测木星大红斑",
+      "expected": [],
+      "category": "abstention",
+      "split": "heldout"
+    }
+  ],
+  "semantic_stress": [
+    {
+      "query": "那个在红色星球上自己种菜的宇航员电影",
+      "expected": [
+        "film"
+      ]
+    },
+    {
+      "query": "一根能让画面停止变蓝的条子",
+      "expected": [
+        "repair"
+      ]
+    },
+    {
+      "query": "像海浪一样起伏的那个旋律",
+      "expected": [
+        "music"
+      ]
+    }
+  ]
+}

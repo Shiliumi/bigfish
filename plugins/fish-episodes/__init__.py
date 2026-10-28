@@ -8,7 +8,7 @@ from agent.memory_provider import MemoryProvider
 
 class FishEpisodes(MemoryProvider):
     def __init__(self):
-        self.primary = False
+        self.primary = None
         self.eligible = False
         self.current_user = ''
 
@@ -66,16 +66,20 @@ class FishEpisodes(MemoryProvider):
 
     def sync_turn(self, user_content, assistant_content, *, session_id='', **kwargs):
         try:
-            if self.eligible:
+            author=kwargs.get('turn_author')
+            eligible=self.primary and not bool(author.get('is_bot')) if isinstance(author,dict) else self.eligible
+            if eligible:
                 with self.journal(self.root) as journal:
                     journal.capture(session_id or self.session_id, user_content, assistant_content)
         finally:
-            self.current_user = ''
+            # The manager syncs asynchronously: an older completed turn must not clear a newer one.
+            if self.current_user == user_content:self.current_user = ''
 
     def get_tool_schemas(self):
-        if not self.primary:
+        # Hermes registers tool routes before initialize() supplies the agent context.
+        if self.primary is False:
             return []
-        return [{'name': 'fish_recall', 'description': '按关键词找回具体共同聊天经历。返回日期、来源和有限原片段；找不到就别编。',
+        return [{'name': 'fish_recall', 'description': '按话题、简称、已设置别名或日期找回具体共同聊天经历。支持昨天、前天、上周及明确日期；返回来源与相关原片段，找不到别编，换个具体线索或坦言没找到。',
                  'parameters': {'type': 'object', 'properties': {'query': {'type': 'string', 'description': '具体话题、作品、两字昵称或未完问题'}}, 'required': ['query'], 'additionalProperties': False}},
                 {'name':'fish_correct_memory','description':'用户明确纠正记错的旧回忆时，以当前用户原话更新该段共同经历；不能凭猜测改写，不修改核心 USER。先用 fish_recall 取得 id 和 revision。',
                  'parameters':{'type':'object','properties':{'id':{'type':'string'},'revision':{'type':'integer'},'quote':{'type':'string','description':'当前用户消息中的原文片段，最多450字，不能改写；留空使用当前原话。'}},'required':['id','revision'],'additionalProperties':False}}]

@@ -22,6 +22,9 @@ class AdapterTest(unittest.TestCase):
         self.provider=module.FishEpisodes()
     def initialize(self,scope='primary'):
         self.provider.initialize('chat-new',hermes_home=str(self.root/'.hermes'),agent_context=scope)
+    def test_tool_routes_are_advertised_before_initialization_but_cannot_execute(self):
+        self.assertEqual({s['name']for s in self.provider.get_tool_schemas()},{'fish_recall','fish_correct_memory'})
+        self.assertIn('error',json.loads(self.provider.handle_tool_call('fish_recall',{'query':'积木'})))
     def test_primary_turn_records_once_and_recall_excludes_current_conversation(self):
         self.initialize();self.provider.on_turn_start(1,'旧话题');self.provider.sync_turn('还记得阿蓝的积木厨房吗','上次加了升降台。')
         self.provider.sync_turn('还记得阿蓝的积木厨房吗','上次加了升降台。')
@@ -81,7 +84,21 @@ class AdapterTest(unittest.TestCase):
     def test_failed_capture_clears_correction_authorization(self):
         self.initialize();self.provider.on_turn_start(1,'你记错了，我喜欢蓝色机关。')
         with patch.object(self.provider,'journal',side_effect=RuntimeError('storage unavailable')):
-            with self.assertRaises(RuntimeError):self.provider.sync_turn('更正','收到')
+            with self.assertRaises(RuntimeError):self.provider.sync_turn('你记错了，我喜欢蓝色机关。','收到')
         self.assertEqual(self.provider.current_user,'')
+
+    def test_delayed_previous_sync_cannot_clear_new_human_correction(self):
+        self.initialize();self.provider.on_turn_start(1,'先聊积木机关。')
+        message='你记错了，我喜欢蓝色机关。';self.provider.on_turn_start(2,message)
+        self.provider.sync_turn('先聊积木机关。','这次看到一个抽屉机关。')
+        self.assertEqual(self.provider.current_user,message)
+    def test_async_sync_uses_the_completed_turn_author_not_the_next_turn(self):
+        self.initialize();self.provider.on_turn_start(1,'自动投递',author_is_bot=True)
+        self.provider.on_turn_start(2,'真人想聊积木机关。')
+        self.provider.sync_turn('自动投递','自动回复',turn_author={'is_bot':True})
+        self.provider.on_turn_start(3,'另一个自动投递',author_is_bot=True)
+        self.provider.sync_turn('真人想聊积木机关。','这个抽屉机关很有趣。',turn_author={'is_bot':False})
+        with Journal(self.root)as store:
+            self.assertEqual(store.status()['total'],1);self.assertIn('抽屉机关',store.recall('积木机关'))
 
 if __name__=='__main__':unittest.main()

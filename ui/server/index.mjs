@@ -113,7 +113,7 @@ async function handleAPI(req,res,url) {
   if(preference && req.method==='PATCH') {const data=await body(req);return json(res,200,await learningScript(ROOT,'personality.py',{action:'retire',id:preference[1],revision:data.revision}));}
   const episode=name.match(/^\/api\/episodes\/(ep-[a-f0-9]{24})$/);
   if(episode && req.method==='GET') {const value=await journal(ROOT,{action:'detail',id:episode[1]});if(!value)fail('这段回忆不存在或已遗忘。',404);return json(res,200,value);}
-  if(episode && req.method==='PATCH') {const data=await body(req);return json(res,200,await journal(ROOT,{action:'update',id:episode[1],revision:data.revision,summary:data.summary,pinned:data.pinned,forget:data.forget??false,kind:data.kind,invalidate:data.invalidate??false,...(Object.hasOwn(data,'valid_until')?{valid_until:data.valid_until}:{})}));}
+  if(episode && req.method==='PATCH') {const data=await body(req);return json(res,200,await journal(ROOT,{action:'update',id:episode[1],revision:data.revision,summary:data.summary,pinned:data.pinned,forget:data.forget??false,kind:data.kind,invalidate:data.invalidate??false,...(Object.hasOwn(data,'valid_until')?{valid_until:data.valid_until}:{}),...(Object.hasOwn(data,'aliases')?{aliases:data.aliases}:{})}));}
   if(name==='/api/curiosity' && req.method==='GET') return json(res,200,await curiositySnapshot(ROOT));
   if(name==='/api/hermes/summary' && req.method==='GET') return json(res,200,await hermesPanel.summary());
   if(name==='/api/hermes/tools' && req.method==='GET') return json(res,200,await hermesPanel.tools());
