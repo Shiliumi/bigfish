@@ -130,6 +130,8 @@ swiftc desktop/PetBehavior.swift scripts/test_pet_behavior.swift -o /tmp/bigfish
 
 更新界面后重新执行 `npm run build --prefix ui`；更新原生代码或素材后先退出应用，再运行 `python3 scripts/build_app.py`。需要重新生成视频时，参见 [素材说明](docs/ASSETS.md)。
 
+对话效果的开发抽样见 [逐轮互动回放](docs/conversation-dialogues.md)：显式 `--live` 才调用配置的付费 API，材料使用公共模板与虚构对话，计入后台额度；实验候选不自动安装到人设，也不作为应用日常任务运行。
+
 ## 数据与 Git 忽略规则
 
 | 路径 | 内容 | 上传 Git |
