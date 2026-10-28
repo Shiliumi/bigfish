@@ -17,6 +17,13 @@ TZ = ZoneInfo('Asia/Shanghai')
 DAILY_LIMIT = 3
 
 
+def activity_settings(root):
+    value = load(root / 'data/automation/settings.json', {'paused': False, 'max_outings': DAILY_LIMIT})
+    if not isinstance(value, dict) or not isinstance(value.get('paused', False), bool) or type(value.get('max_outings', DAILY_LIMIT)) is not int or not 1 <= value.get('max_outings', DAILY_LIMIT) <= DAILY_LIMIT:
+        raise ValueError('后台活动设置损坏，请在鱼粮账本中重新保存。')
+    return {'paused': value.get('paused', False), 'max_outings': value.get('max_outings', DAILY_LIMIT)}
+
+
 def load(path, default):
     return json.loads(path.read_text()) if path.exists() else default
 
@@ -52,10 +59,13 @@ def recent_count(value, now, root):
 
 def available(value, now, root):
     runs = value['runs']
+    settings = activity_settings(root)
+    if settings['paused']:
+        return False, '后台省粮暂停中，聊天仍可使用。'
     if not 9 <= now.hour < 22:
         return False, '现在是安静时间。'
-    if recent_count(value, now, root) >= DAILY_LIMIT:
-        return False, '今天已经逛过三次，先消化一下。'
+    if recent_count(value, now, root) >= settings['max_outings']:
+        return False, '今天的出发额度已经用完，先消化一下。'
     if runs and now - datetime.fromisoformat(runs[-1]['started_at']) < timedelta(hours=2):
         return False, '刚逛回来，先歇一会儿。'
     return True, ''
@@ -72,7 +82,7 @@ def agenda(root, now=None):
     candidates.sort(key=score, reverse=True)
     # These are quotations from real observations, not user preferences or fixed identity.
     evidence = observations(root)[-6:]
-    return {'can_go': allowed, 'rest_reason': reason, 'used_today': recent_count(value, now, root), 'daily_limit': DAILY_LIMIT,
+    return {'can_go': allowed, 'rest_reason': reason, 'used_today': recent_count(value, now, root), 'daily_limit': activity_settings(root)['max_outings'],
             'threads': candidates[:3], 'recent_observations': [{k: row.get(k) for k in ('id', 'url', 'observation', 'candidate_trait', 'reason')} for row in evidence],
             'choice': '先想自己还想知道什么。可以追一个问题，也可以从一个新入口随便看看；不想逛就休息，不必交三条发现。'}
 

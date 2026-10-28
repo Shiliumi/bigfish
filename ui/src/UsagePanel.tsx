@@ -1,0 +1,27 @@
+import {useEffect,useRef,useState} from 'react'
+import {RefreshCw,Pause,Play,CheckCircle2,AlertCircle} from 'lucide-react'
+import {api} from './api'
+import './learning.css'
+interface Bucket {source:string;sessions:number;calls:number;input:number;output:number;cached:number;reasoning:number;unknown_sessions:number}
+interface Usage {days:number;available:boolean;main:Omit<Bucket,'source'|'sessions'>;cache_hit_ratio:number|null;sources:Bucket[];auxiliary:{task:string;calls:number;input:number;output:number}[];partial:boolean;generated_at:string;settings:{paused:boolean;max_outings:number};gates:{kind:string;wake:boolean;reason:string;checked_at:string|null;error:boolean;skipped_ticks:number}[]}
+const number=(value:number)=>new Intl.NumberFormat('zh-CN',{notation:'compact',maximumFractionDigits:1}).format(value)
+const source=(key:string)=>({bigfish:'和你聊天',cron:'日常任务',oneshot:'单次任务',tui:'终端',other:'其他 / 未单列来源'}[key]||key)
+const task=(key:string)=>({background_review:'对话后的后台复盘',title_generation:'会话标题',approval:'操作审批',compression:'上下文整理'}[key]||key)
+export default function UsagePanel(){
+ const [days,setDays]=useState(7),[data,setData]=useState<Usage|null>(null),[error,setError]=useState(''),[loading,setLoading]=useState(false),[saving,setSaving]=useState(false)
+ const sequence=useRef(0)
+ async function load(){const id=++sequence.current;setLoading(true);setError('');try{const value=await api<Usage>('/usage?days='+days);if(id===sequence.current)setData(value)}catch(e){if(id===sequence.current)setError((e as Error).message)}finally{if(id===sequence.current)setLoading(false)}}
+ useEffect(()=>{void load();return()=>{sequence.current++}},[days])
+ async function settings(change:Partial<Usage['settings']>){if(!data)return;setSaving(true);setError('');try{const value=await api<Usage['settings']>('/automation/settings',{method:'PUT',body:JSON.stringify({...data.settings,...change})});setData(v=>v?{...v,settings:value}:v)}catch(e){setError((e as Error).message)}finally{setSaving(false)}}
+ return <section className="learning-panel" aria-label="鱼粮账本"><header className="learning-heading"><div><h2>鱼粮花到哪里了</h2><p>聊天、出门和整理分开看，没事的时候就安心歇一会儿。</p></div><div className="learning-actions"><select aria-label="统计范围" value={days} onChange={e=>setDays(Number(e.target.value))}><option value={7}>近 7 天</option><option value={30}>近 30 天</option><option value={90}>近 90 天</option></select><button className="secondary-button" disabled={loading} onClick={()=>void load()}><RefreshCw size={14} className={loading?'spin':''}/>刷新</button></div></header>
+ {error&&<p role="alert" className="learning-error">{error}</p>}
+ {!data&&loading&&<p role="status">正在读取本机用量…</p>}
+ {data&&<>{!data.available&&<p className="learning-error" role="status">暂时无法读取 Hermes 用量，当前数值未知；仍可调整后台活动。</p>}<div className="learning-metrics">{[{label:'主调用',value:number(data.main.calls),note:'辅助调用另列在下方'},{label:'未缓存输入',value:number(data.main.input),note:'主调用 token'},{label:'输出',value:number(data.main.output),note:'已包含推理部分'},{label:'输入缓存命中',value:data.cache_hit_ratio===null?'暂无':(data.cache_hit_ratio*100).toFixed(1)+'%',note:'按主调用输入 token 统计'}].map(item=><article key={item.label}><span>{item.label}</span><strong>{data.available?item.value:'—'}</strong><small>{item.note}</small></article>)}</div>
+ <div className="learning-table-wrap"><table><caption>主调用来源</caption><thead><tr><th>来源</th><th>调用</th><th>未缓存输入</th><th>缓存读取</th><th>输出</th></tr></thead><tbody>{data.sources.map(row=><tr key={row.source}><th>{source(row.source)}</th><td>{row.calls.toLocaleString()}</td><td>{number(row.input)}</td><td>{number(row.cached)}</td><td>{number(row.output)}</td></tr>)}</tbody></table></div>
+ {data.auxiliary.length>0&&<div className="learning-table-wrap"><table><caption>辅助调用 · 不与上表重复累计</caption><thead><tr><th>用途</th><th>调用</th><th>未缓存输入</th><th>输出</th></tr></thead><tbody>{data.auxiliary.map(row=><tr key={row.task}><th>{task(row.task)}</th><td>{row.calls.toLocaleString()}</td><td>{number(row.input)}</td><td>{number(row.output)}</td></tr>)}</tbody></table></div>}
+ <p className="learning-footnote">按会话开始时间归入统计窗口，跨日长对话不等同于当日账单。缓存与未缓存分开计，推理不重复相加；金额以服务商账单为准。{data.available&&data.partial&&' 当前只读取了最近 3000 段会话，统计不完整。'}{data.main.unknown_sessions>0&&` 有 ${data.main.unknown_sessions} 段用量未知，不能视为零。`}</p>
+ <div className="learning-controls"><div><h3>后台省粮</h3><p>{data.settings.paused?'暂停唤醒冲浪与整理，聊天仍可使用。':'在调用模型前检查额度和新增内容。'}</p></div><button className="secondary-button" disabled={saving} onClick={()=>void settings({paused:!data.settings.paused})}>{data.settings.paused?<Play size={14}/>:<Pause size={14}/>} {data.settings.paused?'恢复后台':'暂停后台'}</button><label>每天实际出发<select aria-label="每天实际出发上限" disabled={saving} value={data.settings.max_outings} onChange={e=>void settings({max_outings:Number(e.target.value)})}>{[1,2,3].map(n=><option key={n} value={n}>{n} 次</option>)}</select></label></div>
+ <div className="learning-gates">{data.gates.map(g=><article key={g.kind}>{g.error?<AlertCircle size={17}/>:<CheckCircle2 size={17}/>}<div><h3>{g.kind==='surf'?'出发前看一眼':'整理前看一眼'}</h3><p>{g.reason}</p><small>{g.checked_at?new Date(g.checked_at).toLocaleString('zh-CN'):'等待下个机会'} · 已跳过 {g.skipped_ticks} 次</small></div><span>{g.error?'需检查':g.checked_at?(g.wake?'允许唤醒':'本次未调用'):'尚未运行'}</span></article>)}</div>
+ <p className="learning-footnote">此开关只控制冲浪与记忆整理，其他任务请到日常安排管理。暂停与每日上限影响下一次唤醒，正在执行的工作会继续收尾。出发次数是活动额度，不是金额或 token 硬上限。</p></>}
+ </section>
+}

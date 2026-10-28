@@ -2,13 +2,14 @@ import {useEffect,useRef,useState} from 'react'
 import {Activity,BookOpen,CheckCircle2,ChevronLeft,ChevronRight,FolderOpen,Layers,MessageCircle,Pencil,RefreshCw,Search,Settings2,Wrench,X} from 'lucide-react'
 import {api} from './api'
 import './hermes.css'
+import UsagePanel from './UsagePanel'
 interface Tool {name:string;label:string;description:string;enabled:boolean;configured:boolean;platform:string;tools:string[]}
 interface Skill {name:string;description:string;category:string;enabled:boolean;usage:number;provenance:string}
 interface Session {id:string;title:string;source:string;model:string;message_count:number;tool_call_count:number;last_active:number;is_active:boolean}
 interface Detail {session:Session;messages:{role:string;content:string}[];offset:number;has_more:boolean;revision:number;generation:number|null}
 interface Summary {connected:boolean;version:string;gateway_running:boolean;gateway_state:string;active_sessions:number;stats:{total:number;messages:number;by_source:Record<string,number>}|null;jobs:{id:string;name:string;enabled:boolean;last_status:string;next_run_at:string;last_run_at:string;running:boolean}[];partial:boolean}
-type Tab='overview'|'tools'|'skills'|'sessions'
-const tabs=[{id:'overview',label:'运行状态',icon:Activity},{id:'tools',label:'工具能力',icon:Wrench},{id:'skills',label:'技能库',icon:BookOpen},{id:'sessions',label:'全部会话',icon:MessageCircle}] as const
+type Tab='overview'|'tools'|'skills'|'sessions'|'usage'
+const tabs=[{id:'overview',label:'运行状态',icon:Activity},{id:'tools',label:'工具能力',icon:Wrench},{id:'skills',label:'技能库',icon:BookOpen},{id:'sessions',label:'全部会话',icon:MessageCircle},{id:'usage',label:'鱼粮账本',icon:Activity}] as const
 const sourceLabel=(source:string)=>({bigfish:'大肥鱼',cron:'日常任务',tui:'终端',oneshot:'单次任务'}[source]||source)
 const time=(value?:string|number)=>value?new Date(typeof value==='number'?value*1000:value).toLocaleString('zh-CN',{timeZone:'Asia/Shanghai',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hour12:false}):'暂无'
 const toolNames:Record<string,string>={web:'网页搜索',browser:'浏览器',terminal:'终端',file:'文件读写',memory:'长期记忆',skills:'技能',cronjob:'定时任务',session_search:'会话回忆',todo:'待办事项',vision:'图片理解',image_gen:'图片生成',tts:'语音朗读',computer_use:'电脑操作',code_execution:'代码执行',clarify:'向你提问',delegate_task:'子任务协作'}
@@ -34,10 +35,11 @@ export default function HermesPanel({busy,onResume,onSettings,onRoutines,onChang
  async function openRuns(job:NonNullable<Summary>['jobs'][number]){setWorking(job.id);setError('');try{const v=await api<any>('/hermes/jobs/'+job.id+'/runs');setRuns({name:job.name,items:Array.isArray(v)?v:v.runs||[]})}catch(e){setError((e as Error).message)}finally{setWorking('')}}
  const filteredTools=tools.filter(v=>(v.name+v.label+v.description).toLowerCase().includes(search.toLowerCase())),filteredSkills=skills.filter(v=>(v.name+v.description+v.category).toLowerCase().includes(search.toLowerCase()))
  return <section className="hermes-panel" aria-label="Hermes 面板">
-  <div className="hermes-heading"><div><span className="hermes-eyebrow">ENGINE ROOM</span><h1>鱼塘控制室<span>Hermes</span></h1><p>看看她在忙什么，也给好奇心配好趁手的工具。</p></div><button className="secondary-button" disabled={loading} onClick={()=>void load()}><RefreshCw size={14} className={loading?'spin':''}/>刷新</button></div>
+  <div className="hermes-heading"><div><span className="hermes-eyebrow">ENGINE ROOM</span><h1>鱼塘控制室<span>Hermes</span></h1><p>看看她在忙什么，也给好奇心配好趁手的工具。</p></div>{tab!=='usage'&&<button className="secondary-button" disabled={loading} onClick={()=>void load()}><RefreshCw size={14} className={loading?'spin':''}/>刷新</button>}</div>
   <nav className="hermes-tabs" aria-label="Hermes 功能">{tabs.map(t=><button key={t.id} aria-current={tab===t.id?'page':undefined} className={tab===t.id?'active':''} onClick={()=>changeTab(t.id)}><t.icon size={16}/>{t.label}</button>)}</nav>
   {error&&<p className="hermes-error" role="alert">{error}<button onClick={()=>setError('')} aria-label="关闭错误"><X size={13}/></button></p>}{notice&&<p className="hermes-notice" role="status"><CheckCircle2 size={15}/>{notice}</p>}
   {loading&&<div className="hermes-loading" role="status"><RefreshCw size={17} className="spin"/>正在读取 Hermes…</div>}
+  {tab==='usage'&&<UsagePanel/>}
   {tab==='overview'&&summary&&<>
    <div className="hermes-status"><span className={'status-dot '+(summary.gateway_running?'':'offline')}/><strong>{summary.gateway_running?'后台运行中':'后台尚未运行'}</strong><span>Hermes {summary.version||'版本未知'}</span><em>{summary.active_sessions} 个活跃会话</em></div>
    {summary.partial&&<p className="hermes-muted">部分状态暂时没有读到，可以稍后刷新。</p>}

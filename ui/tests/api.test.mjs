@@ -61,3 +61,11 @@ test('model configuration exposes only a presence flag and rejects cross-origin 
  assert.equal((await fetch(BASE+'/api/model-settings/test',{method:'POST',headers:{...headers,Origin:'https://example.org'},body:'{}'})).status,403);
  assert.equal((await fetch(BASE+'/api/model-settings',{method:'PUT',headers:{cookie,'Content-Type':'application/json'},body:'{}'})).status,403);
 });
+
+test('usage and episodic memory inherit native-only authentication and validate lookups',async()=>{
+ for(const route of ['/api/usage','/api/episodes'])assert.equal((await fetch(BASE+route)).status,401);
+ const usage=await fetch(BASE+'/api/usage?days=7',{headers});assert.equal(usage.status,200);const value=await usage.json();assert.equal(value.days,7);assert.ok(Array.isArray(value.sources));assert.equal(typeof value.settings.paused,'boolean');
+ const episodes=await fetch(BASE+'/api/episodes',{headers});assert.equal(episodes.status,200);const memory=await episodes.json();assert.ok(Array.isArray(memory.items));assert.ok(memory.items.every(item=>!Object.hasOwn(item,'excerpt')));
+ assert.equal((await fetch(BASE+'/api/episodes/ep-000000000000000000000000',{headers})).status,404);
+ assert.equal((await fetch(BASE+'/api/usage?days=0',{headers})).status,400);
+});

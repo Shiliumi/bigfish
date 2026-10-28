@@ -44,16 +44,26 @@ class GrowthTests(unittest.TestCase):
         with self.assertRaises(ValueError): growth.apply(self.root, self.proposal([e["id"] for e in entries]), self.now)
         self.assertEqual((self.root / ".hermes/SOUL.md").read_text(), self.soul)
 
-    def test_one_platform_or_one_day_is_not_enough_even_with_three_links(self):
+    def test_one_day_is_not_enough_even_with_three_links(self):
         entries = growth.record(self.root, self.entries, self.now)
         proposal = self.proposal([e["id"] for e in entries])
         for altered in [
-            [{**e, "platform": "bilibili"} for e in entries],
             [{**e, "seen_at": "2026-10-27T12:00:00+08:00"} for e in entries],
         ]:
             with patch.object(growth, "observations", return_value=altered):
                 with self.assertRaises(ValueError): growth.apply(self.root, proposal, self.now)
         self.assertEqual((self.root / ".hermes/SOUL.md").read_text(), self.soul)
+
+    def test_same_platform_across_days_is_valid_but_tracking_aliases_are_not(self):
+        entries = growth.record(self.root, self.entries, self.now)
+        proposal = self.proposal([e['id'] for e in entries])
+        aliased = [{**e, 'url': 'https://www.bilibili.com/video/BV1?utm_source='+str(i)} for i,e in enumerate(entries)]
+        with patch.object(growth, 'observations', return_value=aliased):
+            with self.assertRaises(ValueError): growth.apply(self.root, proposal, self.now)
+        same_platform = [{**e, 'platform': 'bilibili', 'url': 'https://www.bilibili.com/video/BV'+str(i)} for i,e in enumerate(entries)]
+        with patch.object(growth, 'observations', return_value=same_platform):
+            profile=growth.apply(self.root, proposal, self.now)
+        self.assertEqual(len(profile['traits']),1)
 
     def test_eligible_update_preserves_manual_content_and_backs_up(self):
         entries = growth.record(self.root, self.entries, self.now)

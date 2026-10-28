@@ -9,7 +9,7 @@ from pathlib import Path
 import re
 import shutil
 import tempfile
-from urllib.parse import urlsplit
+from urllib.parse import urlsplit, urlunsplit, parse_qsl, urlencode
 from zoneinfo import ZoneInfo
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -44,6 +44,12 @@ def platform(url):
         if any(host == domain or host.endswith("." + domain) for domain in domains):
             return name
     return host
+
+
+def canonical_url(url):
+    value = urlsplit(url)
+    query = [(key, val) for key, val in parse_qsl(value.query) if not key.lower().startswith('utm_') and key.lower() not in {'spm', 'from', 'share_source', 'share_medium', 'vd_source', 'fbclid', 'gclid', 't'}]
+    return urlunsplit(('https', (value.hostname or '').lower().removeprefix('www.'), value.path.rstrip('/'), urlencode(sorted(query)), ''))
 
 
 def observations(root):
@@ -119,8 +125,8 @@ def apply(root, proposal, now=None):
         if not isinstance(ids, list) or any(not isinstance(i, str) or i not in evidence for i in ids):
             raise ValueError("候选倾向引用了不存在的观察。")
         sources = [evidence[i] for i in set(ids)]
-        if len(sources) < 3 or len({s["url"] for s in sources}) < 3 or len({s["platform"] for s in sources}) < 2 or len({timestamp(s["seen_at"]).astimezone(TZ).date() for s in sources}) < 2:
-            raise ValueError("至少要有三条不同链接、两个平台、两天的实际观察，再决定是否形成倾向。")
+        if len(sources) < 3 or len({canonical_url(s["url"]) for s in sources}) < 3 or len({timestamp(s["seen_at"]).astimezone(TZ).date() for s in sources}) < 2:
+            raise ValueError("至少要有三个不同内容链接、跨两天的实际观察；同一作品的分享参数不算独立经历。")
         if any(timestamp(s["seen_at"]) > now for s in sources):
             raise ValueError("不能引用未来的观察。")
         traits[change["id"]] = {"id": change["id"], "text": text, "evidence_ids": sorted(set(ids))}

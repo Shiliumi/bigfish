@@ -14,6 +14,8 @@ import { createDesktopAccess, desktopKeyPath } from './desktop-access.mjs';
 import { createHermesPanel } from './hermes-panel.mjs';
 import { renameStoredChat } from './session-title.mjs';
 import { curiositySnapshot } from './curiosity.mjs';
+import { createUsage } from './usage.mjs';
+import { journal } from './journal.mjs';
 
 const UI = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const ROOT = path.dirname(UI), HOME = path.join(ROOT, '.hermes');
@@ -21,6 +23,7 @@ const PORT = Number(process.env.FISH_UI_PORT || 9120), NATIVE = 'http://127.0.0.
 const SESSION = randomBytes(32).toString('hex');
 const desktopAccess = await createDesktopAccess(ROOT,{keyPath:desktopKeyPath()});
 const hermesPanel = createHermesPanel(native,{renameChat:async(id,title)=>renameStoredChat(`ws://127.0.0.1:9119/api/ws?token=${encodeURIComponent(await getToken())}`,id,title)});
+const usage = createUsage(ROOT,native);
 const documents = { memory: path.join(HOME,'memories/MEMORY.md'), user: path.join(HOME,'memories/USER.md'), interests: path.join(ROOT,'INTERESTS.md'), soul: path.join(HOME,'SOUL.md') };
 let nativeToken = '', tokenTime = 0, vite;
 const chatTickets = new Map();
@@ -100,6 +103,12 @@ async function overview() {
 }
 async function handleAPI(req,res,url) {
   authorize(req);const name=url.pathname;
+  if(name==='/api/usage' && req.method==='GET') return json(res,200,await usage.snapshot(url.searchParams.get('days')));
+  if(name==='/api/automation/settings' && req.method==='PUT') return json(res,200,await usage.saveSettings(await body(req)));
+  if(name==='/api/episodes' && req.method==='GET') return json(res,200,await journal(ROOT,{q:(url.searchParams.get('q')||'').slice(0,200),limit:30}));
+  const episode=name.match(/^\/api\/episodes\/(ep-[a-f0-9]{24})$/);
+  if(episode && req.method==='GET') {const value=await journal(ROOT,{action:'detail',id:episode[1]});if(!value)fail('这段回忆不存在或已遗忘。',404);return json(res,200,value);}
+  if(episode && req.method==='PATCH') {const data=await body(req);return json(res,200,await journal(ROOT,{action:'update',id:episode[1],revision:data.revision,summary:data.summary,pinned:data.pinned,forget:data.forget??false}));}
   if(name==='/api/curiosity' && req.method==='GET') return json(res,200,await curiositySnapshot(ROOT));
   if(name==='/api/hermes/summary' && req.method==='GET') return json(res,200,await hermesPanel.summary());
   if(name==='/api/hermes/tools' && req.method==='GET') return json(res,200,await hermesPanel.tools());
