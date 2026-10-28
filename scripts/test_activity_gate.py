@@ -50,6 +50,15 @@ class GateTest(unittest.TestCase):
         with Journal(self.root) as journal:journal.update(item['id'],1,forget=True)
         with self.assertRaises(ValueError):self.finish(ident)
         self.assertIsNone(gate.pending(self.root))
+    def test_preference_events_appended_during_review_remain_pending(self):
+        from personality import propose_trial,trial_feedback
+        with Journal(self.root,now=self.now) as store:item=store.capture('start','一起看看积木机关','这次机关很吸引我。')
+        trial=propose_trial(self.root,{'id':'builds','text':'我似乎喜欢积木里小小的机关。','reason':'这次具体看到了一个有趣的机关。','evidence_ids':[item['id']]},self.now)
+        ident=gate.evaluate(self.root,'memory',self.now)['context']['snapshot_id']
+        with Journal(self.root,now=self.now+timedelta(days=1)) as store:new=store.capture('next','另一个积木厨房作品','我又想跟着看看这个机关。')
+        trial_feedback(self.root,{'id':trial['id'],'revision':trial['revision'],'outcome':'followed','reason':'这次新作品还有另一个具体的机关。','evidence_ids':[new['id']]},self.now+timedelta(days=1))
+        self.finish(ident);pending=gate.pending(self.root);self.assertEqual(len(pending['selected']['preference_events']),1)
+
     def test_corrupt_settings_rejected(self):
         gate.write(self.root/'data/automation/settings.json',{'paused':False,'max_outings':0})
         with self.assertRaises(ValueError):gate.evaluate(self.root,'surf',self.now)

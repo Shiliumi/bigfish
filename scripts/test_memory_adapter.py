@@ -1,4 +1,5 @@
 import importlib.util
+import json
 from pathlib import Path
 import shutil
 import sys
@@ -14,7 +15,7 @@ class AdapterTest(unittest.TestCase):
         (self.root/'scripts').mkdir();(self.root/'scripts/fish_journal.py').write_text('# project marker')
         plugin=self.root/'.hermes/plugins/fish-episodes';plugin.mkdir(parents=True)
         source=Path(__file__).resolve().parents[1]
-        shutil.copy2(source/'plugins/fish-episodes/__init__.py',plugin/'__init__.py');shutil.copy2(source/'scripts/fish_journal.py',plugin/'journal.py')
+        shutil.copy2(source/'plugins/fish-episodes/__init__.py',plugin/'__init__.py');shutil.copy2(source/'scripts/fish_journal.py',plugin/'journal.py');shutil.copy2(source/'scripts/personality.py',plugin/'growth.py')
         stub=types.ModuleType('agent.memory_provider');stub.MemoryProvider=type('MemoryProvider',(),{})
         with patch.dict(sys.modules,{'agent.memory_provider':stub}):
             spec=importlib.util.spec_from_file_location('test_fish_adapter',plugin/'__init__.py');module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
@@ -34,5 +35,53 @@ class AdapterTest(unittest.TestCase):
         with Journal(self.root) as journal:self.assertEqual(journal.status()['total'],0)
     def test_foreign_home_never_binds_to_project_memory(self):
         with self.assertRaises(ValueError):self.provider.initialize('other',hermes_home=str(self.root/'foreign'))
+
+    def test_installed_growth_helper_supplies_only_local_trying_context(self):
+        from datetime import datetime,timezone
+        import personality as growth
+        now=datetime.now(timezone.utc)
+        with Journal(self.root,now=now) as store:item=store.capture('old-chat','一起看看积木厨房','这个机关让我想继续看。')
+        growth.propose_trial(self.root,{'id':'builds','text':'我似乎喜欢有巧妙机关的积木厨房作品。','reason':'实际看到机关，想再跟着看看后续。','evidence_ids':[item['id']]},now)
+        self.initialize();context=self.provider.prefetch('积木厨房')
+        self.assertIn('trying',context);self.assertNotIn('signals',context);self.assertFalse((self.root/'.hermes/memories/USER.md').exists())
+
+    def episode(self):
+        with Journal(self.root) as store:return store.capture('old-chat','周末一起看积木厨房','你最喜欢红色机关。')
+
+    def test_explicit_correction_uses_current_words_and_preserves_history(self):
+        item=self.episode();self.initialize();message='你记错啦，我最喜欢的是蓝色机关。'
+        self.provider.on_turn_start(1,message)
+        result=json.loads(self.provider.handle_tool_call('fish_correct_memory',{'id':item['id'],'revision':1}))
+        self.assertTrue(result['ok'])
+        with Journal(self.root) as store:
+            self.assertEqual(store.get(item['id'])['summary'],'用户更正：'+message)
+            self.assertEqual(store.get(item['id'])['correction_source'],'session:chat-new')
+            self.assertIn('红色机关',store.history(item['id'])[0]['excerpt'])
+            self.assertNotIn('红色机关',store.recall('蓝色机关'))
+        self.assertFalse((self.root/'.hermes/memories/USER.md').exists())
+
+    def test_correction_requires_explicit_live_human_quote_and_current_revision(self):
+        item=self.episode();self.initialize();args={'id':item['id'],'revision':1}
+        for message,extra in [('今天看蓝色机关',{}),('你记错了，我喜欢蓝色机关。',{'author_is_bot':True})]:
+            self.provider.on_turn_start(1,message,**extra)
+            self.assertIn('error',json.loads(self.provider.handle_tool_call('fish_correct_memory',args)))
+        self.provider.on_turn_start(2,'你记错了，我喜欢蓝色机关。')
+        self.assertIn('error',json.loads(self.provider.handle_tool_call('fish_correct_memory',{**args,'quote':'我喜欢黄色机关。'})))
+        self.assertIn('error',json.loads(self.provider.handle_tool_call('fish_correct_memory',{**args,'revision':2})))
+        self.provider.sync_turn('你记错了，我喜欢蓝色机关。','好，我重新记。')
+        self.assertIn('error',json.loads(self.provider.handle_tool_call('fish_correct_memory',args)))
+        with Journal(self.root) as store:self.assertEqual(store.get(item['id'])['revision'],1)
+
+    def test_expired_episode_cannot_be_renewed_by_correction_tool(self):
+        item=self.episode()
+        with Journal(self.root) as store:store.update(item['id'],1,invalidate=True)
+        self.initialize();self.provider.on_turn_start(1,'你记错了，我喜欢蓝色机关。')
+        self.assertIn('error',json.loads(self.provider.handle_tool_call('fish_correct_memory',{'id':item['id'],'revision':2})))
+
+    def test_failed_capture_clears_correction_authorization(self):
+        self.initialize();self.provider.on_turn_start(1,'你记错了，我喜欢蓝色机关。')
+        with patch.object(self.provider,'journal',side_effect=RuntimeError('storage unavailable')):
+            with self.assertRaises(RuntimeError):self.provider.sync_turn('更正','收到')
+        self.assertEqual(self.provider.current_user,'')
 
 if __name__=='__main__':unittest.main()

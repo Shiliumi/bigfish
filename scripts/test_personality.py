@@ -57,15 +57,20 @@ class GrowthTests(unittest.TestCase):
     def test_same_platform_across_days_is_valid_but_tracking_aliases_are_not(self):
         entries = growth.record(self.root, self.entries, self.now)
         proposal = self.proposal([e['id'] for e in entries])
+        (self.root/'data/personality/profile.json').write_text(json.dumps({'traits':[{'id':'quiet-humor','text':'原先已经存在的倾向','evidence_ids':[]}]}))
         aliased = [{**e, 'url': 'https://www.bilibili.com/video/BV1?utm_source='+str(i)} for i,e in enumerate(entries)]
+        for e in aliased: (self.root/e['report_path']).write_text(e['url'])
         with patch.object(growth, 'observations', return_value=aliased):
             with self.assertRaises(ValueError): growth.apply(self.root, proposal, self.now)
         same_platform = [{**e, 'platform': 'bilibili', 'url': 'https://www.bilibili.com/video/BV'+str(i)} for i,e in enumerate(entries)]
+        for e in same_platform: (self.root/e['report_path']).write_text(e['url'])
         with patch.object(growth, 'observations', return_value=same_platform):
             profile=growth.apply(self.root, proposal, self.now)
         self.assertEqual(len(profile['traits']),1)
 
     def test_eligible_update_preserves_manual_content_and_backs_up(self):
+        (self.root/'data/personality').mkdir(parents=True,exist_ok=True)
+        (self.root/'data/personality/profile.json').write_text(json.dumps({'traits':[{'id':'quiet-humor','text':'原先已经存在的倾向','evidence_ids':[]}]}))
         entries = growth.record(self.root, self.entries, self.now)
         proposal = self.proposal([e["id"] for e in entries])
         growth.apply(self.root, proposal, self.now)

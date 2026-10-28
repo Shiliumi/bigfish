@@ -69,3 +69,12 @@ test('usage and episodic memory inherit native-only authentication and validate 
  assert.equal((await fetch(BASE+'/api/episodes/ep-000000000000000000000000',{headers})).status,404);
  assert.equal((await fetch(BASE+'/api/usage?days=0',{headers})).status,400);
 });
+
+test('personality and temporal views are native-only and validate scope and revisions',async()=>{
+ assert.equal((await fetch(BASE+'/api/personality')).status,401);
+ const response=await fetch(BASE+'/api/personality',{headers});assert.equal(response.status,200);const value=await response.json();assert.ok(Array.isArray(value.trials));assert.ok(Array.isArray(value.history));assert.ok(!Object.hasOwn(value,'observations'));
+ assert.equal((await fetch(BASE+'/api/episodes?scope=invalid',{headers})).status,409);
+ assert.equal((await fetch(BASE+'/api/episodes?scope=history',{headers})).status,200);
+ assert.equal((await fetch(BASE+'/api/personality/not-present',{method:'PATCH',headers,body:JSON.stringify({revision:true})})).status,409);
+ assert.equal((await fetch(BASE+'/api/personality/not-present',{method:'PATCH',headers:{...headers,Origin:'https://example.org'},body:'{}'})).status,403);
+});

@@ -82,7 +82,10 @@ def agenda(root, now=None):
     candidates.sort(key=score, reverse=True)
     # These are quotations from real observations, not user preferences or fixed identity.
     evidence = observations(root)[-6:]
+    from personality import preference_context
+    preferences = preference_context(root, '', now=now, for_browsing=True)
     return {'can_go': allowed, 'rest_reason': reason, 'used_today': recent_count(value, now, root), 'daily_limit': activity_settings(root)['max_outings'],
+            'trial_preferences': preferences,
             'threads': candidates[:3], 'recent_observations': [{k: row.get(k) for k in ('id', 'url', 'observation', 'candidate_trait', 'reason')} for row in evidence],
             'choice': '先想自己还想知道什么。可以追一个问题，也可以从一个新入口随便看看；不想逛就休息，不必交三条发现。'}
 

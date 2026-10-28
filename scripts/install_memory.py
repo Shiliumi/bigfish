@@ -22,6 +22,7 @@ def main():
     for name in ('__init__.py', 'plugin.yaml'):
         shutil.copy2(ROOT / 'plugins/fish-episodes' / name, destination / name)
     shutil.copy2(ROOT / 'scripts/fish_journal.py', destination / 'journal.py')
+    shutil.copy2(ROOT / 'scripts/personality.py', destination / 'growth.py')
     if args.activate:
         config = ROOT / '.hermes/config.yaml'
         if config.exists():

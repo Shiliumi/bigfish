@@ -61,7 +61,10 @@ def inventory(root):
     from fish_journal import Journal
     with Journal(root) as journal:
         episodes = journal.revisions()
-    return {'reports': reports, 'observations': observations, 'episodes': episodes}
+    from personality import trial_state
+    events = trial_state(root)['events']
+    preferences = {row['id']: hashlib.sha256(json.dumps(row, sort_keys=True, ensure_ascii=False).encode()).hexdigest() for row in events}
+    return {'reports': reports, 'observations': observations, 'episodes': episodes, 'preference_events': preferences}
 
 
 def pending(root):
@@ -114,13 +117,15 @@ def snapshot(root, ident):
 
 
 def review(root, ident):
+    from personality import trial_state
     value = snapshot(root, ident)
     observations = curiosity.observations(root)
     from fish_journal import Journal
     with Journal(root) as journal:
         episodes = [journal.get(key) for key in value['selected']['episodes']]
     return {'snapshot_id': ident, 'reports': list(value['selected']['reports']), 'observations': [row for row in observations if row['id'] in value['selected']['observations']],
-            'episodes': [{'id': row['id'], 'recorded_at': row['recorded_at'], 'summary': row['summary'], 'source_ref': row['source_ref']} for row in episodes if row and row['status'] == 'active'], 'remaining': value['remaining']}
+            'episodes': [{'id': row['id'], 'recorded_at': row['recorded_at'], 'summary': row['summary'], 'source_ref': row['source_ref']} for row in episodes if row and row['status'] == 'active'],
+            'preference_events': [row for row in trial_state(root)['events'] if row['id'] in value['selected'].get('preference_events',{})], 'remaining': value['remaining']}
 
 
 def commit(root, ident, report):

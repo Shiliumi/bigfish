@@ -1,8 +1,12 @@
 import {spawn} from 'node:child_process';
 import path from 'node:path';
 export function journal(root,data){
+ return learningScript(root,'fish_journal.py',data);
+}
+export function learningScript(root,script,data){
+ if(!['fish_journal.py','personality.py'].includes(script))return Promise.reject(new Error('不支持的本机操作。'));
  return new Promise((resolve,reject)=>{
-  const child=spawn(process.env.FISH_PYTHON||'python3',[path.join(root,'scripts/fish_journal.py'),'api'],{cwd:root,stdio:['pipe','pipe','pipe']});let output='',done=false;
+  const child=spawn(process.env.FISH_PYTHON||'python3',[path.join(root,'scripts',script),'api'],{cwd:root,stdio:['pipe','pipe','pipe']});let output='',done=false;
   const finish=(error,value)=>{if(done)return;done=true;clearTimeout(timer);error?reject(error):resolve(value);};
   const timer=setTimeout(()=>{child.kill();finish(Object.assign(new Error('回忆库响应超时，请稍后重试。'),{status:503}));},12000);
   child.stdout.on('data',chunk=>{output+=chunk;if(output.length>1024*1024){child.kill();finish(new Error('回忆结果过长。'));}});

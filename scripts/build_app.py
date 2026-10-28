@@ -33,7 +33,7 @@ def main():
     info = {
         "CFBundleName": "大肥鱼", "CFBundleDisplayName": "大肥鱼", "CFBundleExecutable": "Bigfish",
         "CFBundleIdentifier": "local.aifish.desktop", "CFBundlePackageType": "APPL",
-        "CFBundleShortVersionString": "1.7.0", "CFBundleVersion": "9", "CFBundleIconFile": "AppIcon",
+        "CFBundleShortVersionString": "1.8.0", "CFBundleVersion": "10", "CFBundleIconFile": "AppIcon",
         "CFBundleURLTypes": [{"CFBundleURLName":"local.aifish.desktop", "CFBundleURLSchemes":["bigfish"]}],
         "LSMinimumSystemVersion": "13.0", "NSHighResolutionCapable": True,
         "NSDocumentsFolderUsageDescription": "大肥鱼需要读写本项目中的记忆、探索笔记和本地配置。",
