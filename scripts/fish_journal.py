@@ -57,6 +57,17 @@ def lexical(value):
     return value
 
 
+def redact_text(root, text):
+    env = Path(root) / '.hermes/.env'
+    if env.exists():
+        for line in env.read_text().splitlines():
+            name, sep, value = line.partition('=')
+            value = value.strip().strip('\"\'')
+            if sep and not name.lstrip().startswith('#') and any(k in name.upper() for k in ('KEY', 'TOKEN', 'SECRET', 'PASSWORD')) and len(value) >= 16:
+                text = text.replace(value, '[凭据已隐藏]')
+    return text
+
+
 def tokens(value, limit=16000):
     value=lexical(value)
     terms = set(re.findall(r'[a-z][a-z0-9_+-]{1,39}|\d{2,}', value))
@@ -219,14 +230,7 @@ class Journal:
         self.db.execute('UPDATE episodes SET index_version=?,indexed_revision=? WHERE id=?',(INDEX_VERSION,row['revision'],row['id']))
 
     def redact(self, text):
-        env = self.root / '.hermes/.env'
-        if env.exists():
-            for line in env.read_text().splitlines():
-                name, sep, value = line.partition('=')
-                value = value.strip().strip('\"\'')
-                if sep and not name.lstrip().startswith('#') and any(k in name.upper() for k in ('KEY', 'TOKEN', 'SECRET', 'PASSWORD')) and len(value) >= 16:
-                    text = text.replace(value, '[凭据已隐藏]')
-        return text
+        return redact_text(self.root, text)
 
     def capture(self, session_id, user, assistant, recorded_at=None):
         if not re.fullmatch(r'[A-Za-z0-9_-]{1,256}', session_id or ''):

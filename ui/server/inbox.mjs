@@ -2,6 +2,7 @@ import { readFile, writeFile, mkdir, rename, readdir, stat } from 'node:fs/promi
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { SOCIAL_DEFAULTS, deliveryDecision, greetingCandidates } from './social.mjs';
+import {readInterestControls,interestBlocked} from './interest-controls.mjs';
 export { SOCIAL_DEFAULTS, deliveryDecision } from './social.mjs';
 
 export function createInbox(root, clock = Date.now) {
@@ -41,10 +42,11 @@ export function createInbox(root, clock = Date.now) {
       const library=JSON.parse(await readFile(path.join(directory,'stickers/library.json'),'utf8').catch(()=>' {"items":[]}'));
       if(library.items.some(item=>item.id===data.sticker_id))sticker=data.sticker_id;
     }
-    return {kind:'surf',sticker_id:sticker,text:data.text.trim(),source_url:data.source_url,source_title:String(data.source_title||'刚看到的内容').slice(0,120),report_path:data.report_path,created_at:new Date(timestamp).toISOString(),...continuity};
+    return {kind:'surf',sticker_id:sticker,text:data.text.trim(),source_url:data.source_url,source_title:String(data.source_title||'刚看到的内容').slice(0,120),report_path:data.report_path,created_at:new Date(timestamp).toISOString(),interest_id:/^cur-[a-f0-9]{12}$/.test(data.interest_id||'')?data.interest_id:undefined,...continuity};
   }
   return {
     activity(){lastActivity=clock();},
+    updateInterest:action=>exclusive(action),
     snapshot:()=>exclusive(async()=>{const data=await read();return {settings:data.settings,messages:data.messages,unread:data.messages.filter(m=>!m.read_at).length};}),
     settings:(enabled,greetings)=>exclusive(async()=>{if(typeof enabled!=='boolean')throw Error('请选择是否开启主动招呼。');const data=await read();data.settings.enabled=enabled;if(typeof greetings==='boolean')data.settings.greetings=greetings;await save(data);return data.settings;}),
     update:(id,updates)=>exclusive(async()=>{const data=await read(),message=data.messages.find(m=>m.id===id);if(!message)return null;if(updates.read)message.read_at=new Date(clock()).toISOString();if(updates.notified)message.notified_at=new Date(clock()).toISOString();if(updates.pet_notified)message.pet_notified_at=new Date(clock()).toISOString();if(updates.session_id&&typeof updates.session_id==='string'&&updates.session_id.length<200)message.session_id=updates.session_id;await save(data);return message;}),
@@ -53,8 +55,11 @@ export function createInbox(root, clock = Date.now) {
     cancelPending:kind=>exclusive(async()=>{const data=await read();const previous=data.pending.length;data.pending=data.pending.filter(m=>m.kind!==kind);if(previous!==data.pending.length)await save(data);}),
     tick:()=>exclusive(async()=>{
       const data=await read(),now=clock();let changed=false;
+      const controls=await readInterestControls(root).catch(()=>({unavailable:true,items:[]}));
       const deliver=(candidate,key)=>{
-        const decision=deliveryDecision(candidate,data.messages,data.settings,now,lastActivity);
+        if((candidate.kind||'surf')==='surf'&&controls.unavailable)return false;
+        // Recheck queued messages at delivery time: an outing may predate the user's choice.
+        const decision=(candidate.kind||'surf')==='surf'&&interestBlocked(controls,candidate.interest_id||candidate.thread_id,candidate.source_url,now)?'interest_stopped':deliveryDecision(candidate,data.messages,data.settings,now,lastActivity);
         if(decision==='wait')return false;
         if(key)data.processed.push(key);
         if(decision==='send')data.messages.push({...candidate,id:randomUUID(),sent_at:new Date(now).toISOString(),read_at:null,notified_at:null,pet_notified_at:null});

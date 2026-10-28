@@ -4,7 +4,7 @@ export function journal(root,data){
  return learningScript(root,'fish_journal.py',data);
 }
 export function learningScript(root,script,data){
- if(!['fish_journal.py','personality.py','fish_budget.py'].includes(script))return Promise.reject(new Error('不支持的本机操作。'));
+ if(!['fish_journal.py','personality.py','fish_budget.py','fish_interest.py'].includes(script))return Promise.reject(new Error('不支持的本机操作。'));
  return new Promise((resolve,reject)=>{
   const child=spawn(process.env.FISH_PYTHON||'python3',[path.join(root,'scripts',script),'api'],{cwd:root,stdio:['pipe','pipe','pipe']});let output='',done=false;
   const finish=(error,value)=>{if(done)return;done=true;clearTimeout(timer);error?reject(error):resolve(value);};

@@ -36,6 +36,15 @@ class CompleteTest(unittest.TestCase):
         self.assertEqual(len(list((self.root/'data/outbox').glob('*.json'))),1)
         different=copy.deepcopy(self.payload);different['reason']='换一个理由也不能覆盖已经提交的记录。'
         with self.assertRaises(ValueError):self.complete(different)
+    def test_user_can_stop_an_interest_during_an_outing_without_losing_the_read_report(self):
+        from fish_interest import change,load_controls
+        first=self.complete();thread=curiosity.state(self.root)['threads'][0]
+        later=self.now+timedelta(hours=3);run=curiosity.begin(self.root,thread['id'],later)['run']
+        change(self.root,{'id':thread['id'],'choice':'retire','revision':0},later+timedelta(minutes=1));saved=load_controls(self.root)
+        data=copy.deepcopy(self.payload);data['run_id']=run['id'];data['report']['path']='reports/2026-10-28/1505-surf.md';data['pages'][0]['read_at']=(later+timedelta(minutes=2)).isoformat();data['preference']=None
+        result=finish.complete(self.root,data,later+timedelta(minutes=5))
+        self.assertFalse(result['share_queued']);self.assertEqual(result['skipped_threads'],1);self.assertTrue((self.root/data['report']['path']).exists())
+        self.assertEqual(len(personality.observations(self.root)),2);self.assertEqual(load_controls(self.root),saved)
     def test_invalid_last_step_rolls_back_all_staged_changes(self):
         data=copy.deepcopy(self.payload);data['share']['page_index']=4
         with self.assertRaises(ValueError):self.complete(data)
@@ -61,6 +70,19 @@ class CompleteTest(unittest.TestCase):
         p=self.root/'data/surf-state.json';p.write_text('{"visited":[],"external":"new edit"}')
         with self.assertRaises(ValueError):self.complete()
         self.assertIn('new edit',p.read_text())
+    def test_recovery_preserves_a_choice_made_after_the_prepared_receipt(self):
+        from fish_interest import change,load_controls
+        self.complete();thread=curiosity.state(self.root)['threads'][0];later=self.now+timedelta(hours=3)
+        run=curiosity.begin(self.root,thread['id'],later)['run'];data=copy.deepcopy(self.payload);data['run_id']=run['id'];data['report']['path']='reports/2026-10-28/1505-surf.md';data['pages'][0]['read_at']=(later+timedelta(minutes=2)).isoformat();data['preference']=None
+        actual=finish.write_bytes
+        def crash(path,value):
+            if path==self.root/'data/personality/observations.jsonl':raise OSError('interrupted before observations')
+            return actual(path,value)
+        with patch.object(finish,'write_bytes',side_effect=crash):
+            with self.assertRaises(OSError):finish.complete(self.root,data,later+timedelta(minutes=5))
+        change(self.root,{'id':thread['id'],'choice':'retire','revision':0},later+timedelta(minutes=6));saved=load_controls(self.root)
+        result=finish.complete(self.root,data,later+timedelta(minutes=7));self.assertTrue(result['already_submitted']);self.assertEqual(load_controls(self.root),saved)
+        letter=json.loads((self.root/'data/outbox'/f'{run["id"]}.json').read_text());self.assertEqual(letter['interest_id'],thread['id'])
     def test_blocked_read_creates_no_observation_or_share(self):
         data=copy.deepcopy(self.payload);data.update(pages=[],observations=[],threads=[],preference=None,share=None,outcome='blocked',reason='公开入口目前要求登录，没有实际读到正文。')
         result=self.complete(data);self.assertEqual(result['observation_ids'],[]);self.assertFalse(result['share_queued'])

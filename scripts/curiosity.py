@@ -122,6 +122,9 @@ def remember(root, entries, now=None):
         ident = item.get('id') or 'cur-' + hashlib.sha256(question.encode()).hexdigest()[:12]
         if not isinstance(ident, str) or not re.fullmatch(r'cur-[a-f0-9]{12}', ident): raise ValueError('问题编号无效。')
         existing = next((v for v in value['threads'] if v['id'] == ident), None)
+        from fish_interest import load_controls, blocked
+        if blocked(load_controls(root),ident,[v['url']for v in evidence],now):
+            raise ValueError('这个问题或来源已被用户暂停或放下，保留阅读记录，先换个方向。')
         if existing and existing['status'] == 'closed' and datetime.fromisoformat(existing['updated_at']) + timedelta(days=7) > now:
             raise ValueError('刚失去兴趣的话题先放一周，不要反复翻炒。')
         row = {**(existing or {}), 'id': ident, 'question': question, 'why': why, 'evidence_ids': [v['id'] for v in evidence], 'source_urls': list(dict.fromkeys(v['url'] for v in evidence)),

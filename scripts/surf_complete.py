@@ -12,6 +12,7 @@ import tempfile
 from urllib.parse import urlsplit
 import curiosity
 import personality
+from fish_interest import load_controls, blocked
 
 ROOT=Path(__file__).resolve().parents[1]
 MUTABLE=('data/surf-state.json','data/personality/observations.jsonl','data/curiosity/state.json','data/personality/trials.json')
@@ -108,10 +109,12 @@ def complete(root,data,now=None):
         if len({p['url']for p in pages})!=len(pages):raise ValueError('同一已读页面不重复登记。')
         if not pages and data.get('outcome')!='blocked':raise ValueError('没有实际读到内容只能记录受阻，不制造发现。')
         before={n:read_bytes(root,n)for n in MUTABLE+READ_ONLY}
+        controls=load_controls(root)
         with tempfile.TemporaryDirectory(prefix='fish-surf-',dir=folder) as temporary:
             staged=Path(temporary)
             for n,value in before.items():
                 if value is not None:write_bytes(staged/n,value)
+            curiosity.atomic(staged/'data/curiosity/controls.json',controls)
             write_bytes(staged/name,content.encode())
             surf=curiosity.load(staged/'data/surf-state.json',{'visited':[]})
             surf['visited']+=[{**p,'report':name}for p in pages]
@@ -127,9 +130,9 @@ def complete(root,data,now=None):
                 indexes=item.get('evidence_observations')
                 if not isinstance(indexes,list) or not indexes or any(type(i) is not int or not 0<=i<len(added)for i in indexes):raise ValueError('请用本次观察序号引用依据，不编写 obs-id。')
                 return [added[i]['id']for i in dict.fromkeys(indexes)]
-            remembered=[]
-            if threads:
-                remembered=curiosity.remember(staged,[{**t,'evidence_ids':refs(t)}for t in threads],now)
+            proposed=[{**t,'question':curiosity.text(t.get('question'),'想继续看的问题',6,160),'evidence_ids':refs(t)}for t in threads]
+            allowed=[t for t in proposed if not blocked(controls,t.get('id')or'cur-'+hashlib.sha256(t['question'].encode()).hexdigest()[:12],[added[i]['url']for i in t['evidence_observations']],now)]
+            remembered=curiosity.remember(staged,allowed,now) if allowed else []
             trial=None
             if preference is not None:
                 if not isinstance(preference,dict) or preference.get('action') not in ('trial','feedback'):raise ValueError('本轮可选一项真实试行或跟进反馈。')
@@ -140,20 +143,23 @@ def complete(root,data,now=None):
             if share is not None:
                 if not isinstance(share,dict) or type(share.get('page_index')) is not int or not 0<=share['page_index']<len(pages):raise ValueError('来信只能引用本轮实际阅读的页面。')
                 p=pages[share['page_index']]
+                stopped=blocked(controls,run.get('thread_id'),[p['url']],now)
                 letter={'worth_sharing':True,'text':curiosity.text(share.get('text'),'想说的话',8,320),'why_share':curiosity.text(share.get('why_share'),'分享理由',6,240),
                     'source_url':p['url'],'source_title':p['title'],'report_path':name,'created_at':now.isoformat()}
                 if run.get('thread_id'):
+                    letter['interest_id']=run['thread_id']
                     from fish_conversation import verified_threads
-                    previous=next((t for t in verified_threads(root,now)if t['id']==run['thread_id']),None)
+                    previous=next((t for t in verified_threads(root,now,controls=controls)if t['id']==run['thread_id']),None)
                     if previous:letter.update(thread_id=previous['id'],thread_question=previous['question'],browse_run_id=ident)
                 if share.get('sticker_id'):
                     if not re.fullmatch(r'[a-f0-9]{16}',share['sticker_id']):raise ValueError('表情编号无效。')
                     letter['sticker_id']=share['sticker_id']
-                outbox='data/outbox/'+ident+'.json'
-                if read_bytes(root,outbox) is not None:raise ValueError('本轮来信候选已存在，未覆盖。')
-                curiosity.atomic(staged/outbox,letter)
+                if not stopped:
+                    outbox='data/outbox/'+ident+'.json'
+                    if read_bytes(root,outbox) is not None:raise ValueError('本轮来信候选已存在，未覆盖。')
+                    curiosity.atomic(staged/outbox,letter)
             result={'ok':True,'run_id':ident,'outcome':finished['outcome'],'report_path':name,'observation_ids':[a['id']for a in added],
-                'thread_ids':[t['id']for t in remembered],'preference_id':trial['id'] if trial else None,'share_queued':bool(outbox)}
+                'thread_ids':[t['id']for t in remembered],'skipped_threads':len(proposed)-len(allowed),'preference_id':trial['id'] if trial else None,'share_queued':bool(outbox)}
             order=[name,*MUTABLE]+([outbox]if outbox else [])
             writes=[{'path':n,'before':digest(before.get(n)),'content':(staged/n).read_text()}for n in order if (staged/n).exists() and (staged/n).read_bytes()!=before.get(n)]
             receipt={'version':1,'status':'prepared','payload_hash':token,'writes':writes,'reads':[{'path':n,'before':digest(before[n])}for n in READ_ONLY], 'result':result}

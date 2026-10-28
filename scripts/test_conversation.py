@@ -61,6 +61,21 @@ class ConversationTest(unittest.TestCase):
         thread,proof=self.thread();self.write('data/inbox.json',{'messages':[{'source_url':proof['url'],'sent_at':self.now.isoformat()}]})
         material=talk.interest_material(self.root,'最近看什么',now=self.now);self.assertTrue(material[0]['already_discussed']);self.assertIn('不原样重讲',self.packet('最近在看什么？'))
         self.assertEqual(len((self.root/'data/personality/observations.jsonl').read_text().splitlines()),1)
+    def test_user_interest_choice_filters_chat_and_browsing_without_changing_evidence(self):
+        from fish_interest import change
+        shutil.copy2(Path(__file__).with_name('fish_interest.py'),self.root/'scripts/fish_interest.py')
+        thread,proof=self.thread();before=(self.root/'data/personality/observations.jsonl').read_bytes()
+        change(self.root,{'id':thread['id'],'choice':'pause','revision':0},self.now)
+        self.assertNotIn('"interest":',self.packet('最近看什么？'));self.assertEqual(talk.recent_material(self.root,self.now),[])
+        import curiosity
+        self.assertEqual(curiosity.agenda(self.root,self.now)['threads'],[])
+        change(self.root,{'id':thread['id'],'choice':'resume','revision':1},self.now)
+        self.assertIn('"interest":',self.packet('最近看什么？'));self.assertEqual((self.root/'data/personality/observations.jsonl').read_bytes(),before)
+    def test_same_source_cannot_be_reintroduced_under_a_new_question(self):
+        from fish_interest import change
+        thread,proof=self.thread();change(self.root,{'id':thread['id'],'choice':'retire','revision':0},self.now)
+        import curiosity
+        with self.assertRaises(ValueError):curiosity.remember(self.root,{'id':'cur-abcdef123456','question':'换个名字继续看这张折叠凳？','why':'想用同一个来源重新提出问题。','evidence_ids':[proof['id']]},self.now)
     def test_chat_reference_is_only_written_for_a_literal_verified_link(self):
         thread,proof=self.thread();before=(self.root/'data/curiosity/state.json').read_bytes()
         talk.note_chat_links(self.root,'我猜还有一个新进展。',self.now);self.assertFalse((self.root/'data/curiosity/chat-references.json').exists())

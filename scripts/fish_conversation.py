@@ -72,16 +72,32 @@ def recent_material(root,now=None):
     try:
         root=Path(root);now=instant(now or datetime.now(timezone.utc));file=root/'data/personality/observations.jsonl'
         if not file.exists()or file.stat().st_size>8_000_000:return []
-        visited=read(root/'data/surf-state.json',{'visited':[]})['visited'];result=[]
+        visited=read(root/'data/surf-state.json',{'visited':[]})['visited'];result=[];controls=interest_controls(root)
         for line in reversed(file.read_text().splitlines()[-32:]):
             row=json.loads(line)
-            if verified_observation(root,row,visited,now):result.append({key:row.get(key)for key in ('id','url','observation','candidate_trait','reason')})
+            if not interest_blocked(controls,urls=[row.get('url')],now=now)and verified_observation(root,row,visited,now):result.append({key:row.get(key)for key in ('id','url','observation','candidate_trait','reason')})
             if len(result)>=6:break
         return result[::-1]
     except (ValueError,TypeError,KeyError,OSError):return []
 
 
-def verified_threads(root,now=None):
+def interest_controls(root):
+    # Installed memory adapters bind to their project, without depending on sys.path.
+    import importlib.util
+    path=Path(root)/'scripts/fish_interest.py'
+    if not path.exists():
+        if (Path(root)/'data/curiosity/controls.json').exists():raise ValueError('兴趣设置存在，但读取程序缺失。')
+        return {'items':[]}
+    spec=importlib.util.spec_from_file_location('_fish_interest_controls',path);module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+    return module.load_controls(root)
+
+
+def interest_blocked(controls,ident=None,urls=(),now=None):
+    now=instant(now or datetime.now(timezone.utc))
+    return any((r['choice']=='retired'or instant(r['until'])>now)and(ident==r['id']or bool(set(urls).intersection(r['source_urls'])))for r in controls['items'])
+
+
+def verified_threads(root,now=None,*,controls=None):
     """Return only source-backed, live threads. All text remains quoted material."""
     root=Path(root);now=instant(now or datetime.now(timezone.utc))
     state=read(root/'data/curiosity/state.json',{'threads':[],'runs':[]})
@@ -92,10 +108,11 @@ def verified_threads(root,now=None):
     visited=read(root/'data/surf-state.json',{'visited':[]})['visited']
     inbox=read(root/'data/inbox.json',{'messages':[]})
     references=read(root/'data/curiosity/chat-references.json',{})
-    result=[]
+    result=[];controls=interest_controls(root)if controls is None else controls
     for thread in state['threads']:
         try:
             if thread['status']!='open'or instant(thread['expires_at'])<=now or thread.get('snoozed_until')and instant(thread['snoozed_until'])>now:continue
+            if interest_blocked(controls,thread['id'],thread.get('source_urls',[]),now):continue
             if thread.get('last_outcome')=='bored':continue
             evidence=[]
             for ident in thread.get('evidence_ids',[])[:8]:

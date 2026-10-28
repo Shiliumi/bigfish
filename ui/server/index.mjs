@@ -34,7 +34,7 @@ async function companion() {
     companionPending ||= native('/api/cron/jobs?profile=default').then(data => ({ connected: true, jobs: Array.isArray(data) ? data : data.jobs || [] })).catch(() => ({ connected: false, jobs: [] })).then(value => { companionCache = { ...value, time: Date.now() }; companionPending = null; });
     await companionPending;
   }
-  const letters = await inbox.snapshot(), curiosity = await curiositySnapshot(ROOT);
+  const letters = await inbox.snapshot(), curiosity = await curiositySnapshot(ROOT).catch(()=>({last_outing:null}));
   const outingStarted = curiosity.last_outing?.status==='started' && Date.now()-Date.parse(curiosity.last_outing.started_at)<15*60000;
   const notice = letters.messages.find(m=>!m.read_at&&!m.pet_notified_at&&Date.now()-Date.parse(m.sent_at)<15*60000);
   return {...companionState({ ...companionCache, activities: chatActivity(), unread: letters.unread, outingStarted }),notice:notice?{id:notice.id,text:notice.text,kind:notice.kind||'surf',sent_at:notice.sent_at,source_url:notice.source_url,source_title:notice.source_title}:null,balance:balance.snapshot()};
@@ -115,6 +115,8 @@ async function handleAPI(req,res,url) {
   if(episode && req.method==='GET') {const value=await journal(ROOT,{action:'detail',id:episode[1]});if(!value)fail('这段回忆不存在或已遗忘。',404);return json(res,200,value);}
   if(episode && req.method==='PATCH') {const data=await body(req);return json(res,200,await journal(ROOT,{action:'update',id:episode[1],revision:data.revision,summary:data.summary,pinned:data.pinned,forget:data.forget??false,kind:data.kind,invalidate:data.invalidate??false,...(Object.hasOwn(data,'valid_until')?{valid_until:data.valid_until}:{}),...(Object.hasOwn(data,'aliases')?{aliases:data.aliases}:{})}));}
   if(name==='/api/curiosity' && req.method==='GET') return json(res,200,await curiositySnapshot(ROOT));
+  const interest=name.match(/^\/api\/curiosity\/(cur-[a-f0-9]{12})$/);
+  if(interest && req.method==='PATCH') {const data=await body(req);return json(res,200,await inbox.updateInterest(()=>learningScript(ROOT,'fish_interest.py',{id:interest[1],choice:data.choice,revision:data.revision})));}
   if(name==='/api/hermes/summary' && req.method==='GET') return json(res,200,await hermesPanel.summary());
   if(name==='/api/hermes/tools' && req.method==='GET') return json(res,200,await hermesPanel.tools());
   if(name==='/api/hermes/skills' && req.method==='GET') return json(res,200,await hermesPanel.skills());
