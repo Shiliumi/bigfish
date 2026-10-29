@@ -9,7 +9,8 @@ from urllib.parse import urlsplit
 MAX_CONTEXT=1800
 HINTS={
     'casual':'先接眼前这句话，短句也够；玩笑落在具体细节上，没笑点就正常说，不套固定台词。',
-    'playful':'这句可能在拿你逗趣，先联系当前对话的铺垫、读音和反差，再接眼前的画面；不急着按字面定义或追问发生了什么。短短回逗也够，不补解释、评价和总结。不确定梗意就留一点余地，不认定对方在设套，不编出处或说早就懂了；真在问知识或夸你时照常回应。',
+    'playful':'这句可能在拿你逗趣，联系前几轮的铺垫、读音和反差，接眼前的画面。上一轮若按字面答偏了，就按新线索转弯，不维护旧解释。不拆词定义、盘问发生了什么，或把打趣归纳成道理。短短回逗也够，笑点后就停。不确定就留余地，不认定对方设套，不编出处或说早就懂了；真在问知识或夸你时照常回应。',
+    'personal':'对方在短短地评价你，可能是关心、夸奖，也可能是打趣。结合上文，先顺着眼前形容给一个即时反应；可以半句嘴硬或认领，不争论真假、不要求他解释或举证。亲近地短答就停，真诚夸奖正常收下；不拆词定义，不为续聊追加反问或强造金句。后续有新线索再转弯，不抢猜梗或编出处。',
     'focused':'先准确完成当前请求，按要求控制篇幅；只要一行或代码时不附教程。需要时保留必要说明，收起玩梗、撒娇和表达试行，不岔到自己的兴趣。',
     'gentle':'先回应对方正在表达的具体难受，别急着讲道理或派任务；收起玩笑和卖萌，认真听，不假装知道其处境。用户明确想听见闻时可聊一件有来源的事，否则不推自己的兴趣。',
     'feedback':'按当前原话和上文改口，别重复刚才的解释或声称早就懂了；对方收住就收住，不追猜。直接落实反馈，不辩解或播报人格；长期记住仍走原 memory 工具，不擅自改档案。',
@@ -64,19 +65,28 @@ def playful_cue(text):
     return bool(re.search(r'(?:你|这条鱼).{0,18}(?:长得|圆滚滚|胖乎乎|肥嘟嘟|(?:胖|肥|圆){2}|能吃|饭桶|膨胀|看起来.{0,8}像|有种.{1,12}气质)|(?:^|[，,。！？!?])(?:你)?(?:看你|瞧你|看把你).{1,24}|(?:逗你|拿你开玩笑|给你起个外号)',text))
 
 
+def personal_cue(text):
+    # An ambiguous familiar remark, never a verdict that the user is joking.
+    # Match a whole short utterance so tasks, reported speech and topic questions
+    # do not acquire this hint merely because they contain an adjective.
+    if re.search(r'会|能|懂|支持|记得|知道|看过|收到|出错|故障|余额|来自|属于|意思|出处|为什么|如何',text):return False
+    return bool(re.fullmatch(r'你(?:今天|最近|现在)?(?:(?:是不是|怎么|咋)(?:也|还|又|真)?|(?:也|还|又|真)?)(?:很|挺|太|好|有点|这么|那么)[\u4e00-\u9fff]{1,4}[啊呀哇嘛呢吧了]?[？?！!。~～]*',text.strip()))
+
+
 def classify(query):
     text=user_words(query)
     if re.search(r'(?:帮我|请)(?:先|直接)?(?:写|改|修|查|做|算|解决|解释|讲解|分析|排查)|(?:先|现在|然后|接着|直接)(?:解释|讲解|分析|排查|修复)',text):return 'focused'
     if style_events(query):return 'feedback'
     if re.search(r'(?:别|不要|不用)(?:再|继续|一直)?(?:解释|讲解|分析|举例|展开)(?:了|下去)?',text)and not re.search(r'[，,。；;]\s*(?:解释|讲解|分析|证明|推导|排查)',text):return 'feedback'
     if re.search(r'别老|不要每|少用|说话.{0,8}(?:太|别)|别.{0,8}(?:喊|叫|梗|撒娇)|别装可爱|不想听套话|太正经|像客服|别复读|别一句一个|别再.{0,8}(?:推|发)|不想再看|换个话题',text):return 'feedback'
+    if re.search(r'心情不好|很难受|好难受|压力好大|压力很大|撑不住|有点难过|好焦虑|不想说话|快崩溃|情绪低落|我很累',text):return 'gentle'
     if re.search(r'认真(?:一点|点|说)|严肃|别开玩笑|先别闹|不要开玩笑',text):return 'focused'
     if re.search(r'讲个笑话|冷笑话|逗我|玩个梗|随便唠|陪我瞎聊',text):return 'casual'
-    if re.search(r'心情不好|很难受|好难受|压力好大|压力很大|撑不住|有点难过|好焦虑|不想说话|快崩溃|情绪低落|我很累',text):return 'gentle'
     if re.search(r'代码|报错|bug|排查|解释|证明|推导|怎么实现|帮我(?:写|改|查|做|算)|制定|计划|讲解|分析|诊断|作业|复习|怎么解',text,re.I):return 'focused'
     if re.search(r'你(?:刚才|刚|好像|还是|这次|又)?(?:没听懂|没懂|没接住|理解错了|会错意了)|我(?:说|问)的不是这个|不是这个意思|别猜了|不用猜了|不猜了|不讲了|先不聊这个|不用(?:再)?(?:举例|展开)了',text):return 'feedback'
     if interest_invitation(query):return 'interest'
     if playful_cue(text):return 'playful'
+    if personal_cue(text):return 'personal'
     if re.search(r'白饭|傻鱼|笨鱼|爹|爸|咕|哈哈|好耶|无聊|摸鱼|抽象|可爱',text):return 'casual'
     return 'neutral'
 
@@ -253,7 +263,7 @@ def context(root,query,*,journal,session_id='',tokenize=None,now=None,include_in
     try:voice=recent_voice(journal,session_id,now)
     except Exception:voice=[]
     if voice:packet['recent_rhythm']=voice
-    if include_interest and (mode not in ('focused','gentle','feedback','playful')or mode not in ('feedback','playful')and interest_invitation(query)):
+    if include_interest and (mode not in ('focused','gentle','feedback','playful','personal')or mode not in ('feedback','playful','personal')and interest_invitation(query)):
         material=interest_material(root,query,now=now,tokenize=tokenize,allow_unrelated=mode!='focused')
         if material:
             packet['interest']=material

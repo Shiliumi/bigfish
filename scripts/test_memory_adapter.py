@@ -49,6 +49,18 @@ class AdapterTest(unittest.TestCase):
     def test_foreign_home_never_binds_to_project_memory(self):
         with self.assertRaises(ValueError):self.provider.initialize('other',hermes_home=str(self.root/'foreign'))
 
+    def test_familiar_hint_and_literal_detour_repair_reach_primary_prefetch(self):
+        self.initialize()
+        packet=self.provider.prefetch('你是不是很方啊？')
+        self.assertIn('"mode":"personal"',packet);self.assertIn('关心、夸奖',packet)
+        self.provider.sync_turn('你是不是很方啊？','方是几何形状，与紧张是两码事。')
+        packet=self.provider.prefetch('看你方方正正的，去门口当门墩吧。')
+        self.assertIn('"mode":"playful"',packet);self.assertIn('不维护旧解释',packet)
+        self.assertNotIn('方是几何形状',packet)
+        self.assertIn('"mode":"focused"',self.provider.prefetch('认真说，帮我修这个报错。'))
+        self.assertIn('"mode":"gentle"',self.provider.prefetch('今天很难受，先别闹了。'))
+        self.assertNotIn('"mode":"personal"',self.provider.prefetch('你是不是支持图片？'))
+
     def test_optional_semantic_route_is_bound_and_keeps_existing_tool_names(self):
         before=list(sys.path);self.initialize();self.assertEqual(sys.path,before)
         self.assertEqual(self.provider.semantic.root,self.root.resolve())

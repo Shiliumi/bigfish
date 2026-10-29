@@ -110,6 +110,27 @@ class ConversationTest(unittest.TestCase):
             self.assertEqual(talk.turn_mode('那你没懂，不用猜了。',store,'chat',self.now),'feedback')
             store.capture('chat','帮我排查代码。','先看日志。',recorded_at=(self.now-timedelta(minutes=1)).isoformat())
             self.assertEqual(talk.turn_mode('那就继续吧。',store,'chat',self.now),'neutral')
+    def test_short_personal_remarks_leave_room_for_teasing_care_and_praise(self):
+        self.thread()
+        for query in ['你是不是很方啊？','你是不是挺糯呀','你今天好靠谱呀！','你最近是不是有点累啊']:
+            with self.subTest(query=query):
+                packet=self.packet(query);payload=json.loads(packet.split('\n',1)[1])
+                self.assertEqual(payload['mode'],'personal');self.assertIn('关心、夸奖',payload['hint'])
+                self.assertNotIn('interest',payload);self.assertNotIn(query,packet);self.assertLess(len(packet),500)
+        # A familiar remark is not proof of a joke and does not start a lasting play mode.
+        with Journal(self.root,now=self.now)as store:
+            store.capture('chat','你今天好靠谱呀！','嘿，这句我收下了。',recorded_at=(self.now-timedelta(minutes=1)).isoformat())
+            self.assertEqual(talk.turn_mode('那就歇会吧。',store,'chat',self.now),'neutral')
+    def test_personal_cue_does_not_capture_capabilities_materials_or_real_tasks(self):
+        for query in ['你是不是很会做饭啊？','你是不是很懂这个算法？','你是不是很能吃苦？','你是不是支持图片？','你是不是很方是什么意思？','有人问你是不是很方啊','他说“你是不是很方啊”，帮我分析语法。','```text\n你是不是很方啊\n```\n原文。','你今天好靠谱呀，帮我修复报错。','你今天好靠谱呀，但我很难受。']:
+            with self.subTest(query=query):self.assertNotEqual(talk.classify(query),'personal')
+        self.assertEqual(talk.classify('你是不是很方啊？认真说。'),'focused')
+    def test_new_teasing_clue_can_turn_away_from_an_earlier_literal_answer(self):
+        with Journal(self.root,now=self.now)as store:
+            store.capture('chat','你是不是很方啊？','方是几何形状，与紧张是两码事。',recorded_at=(self.now-timedelta(minutes=1)).isoformat())
+            packet=talk.context(self.root,'看你方方正正的，给门口当门墩吧。',journal=store,session_id='chat',now=self.now)
+            self.assertIn('"mode":"playful"',packet);self.assertIn('不维护旧解释',packet)
+            self.assertNotIn('方是几何形状',packet)
     def test_literal_questions_quotes_and_kindness_are_not_teasing_verdicts(self):
         for query in ['你长得像什么是什么意思？','你今天有种土豆气质这句梗的出处？','你这次帮上忙了，真的谢谢。','他说“看把你得意的”，这句放在结尾。','```text\n你今天有种土豆气质\n```\n这是材料。']:
             with self.subTest(query=query):self.assertNotEqual(talk.classify(query),'playful')
