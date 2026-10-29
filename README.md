@@ -159,6 +159,8 @@ swiftc desktop/PetBehavior.swift scripts/test_pet_behavior.swift -o /tmp/bigfish
 
 自动召回不再只因“最后”“恢复”“密码”等泛词重合就把另一件事带入聊天；真实内容词和用户明确设置的完整别名继续有效。手动搜索仍可查这些记录，原始经历不修改。原有回放目标保持 78/79，先前转述负例的误取由 5/16 到 4/16；对象混淆与深层漏召回仍未全部解决。详见 [召回证据验证](docs/recall-evidence.md)。
 
+后续接话说明补充了随口调侃的具体节奏，减少拆词定义和工整总结。四组三轮模型对比中，部分回逗更短、更贴前文，仍有刻意比喻和认真回答偏长的问题；不是模型训练或通用接梗保证。执行 `python3 scripts/update_conversation_guide.py` 后新建对话加载，保留旧聊天与私人设定；这项说明更新无需重建应用。详见 [日常接话验证](docs/conversation-banter.md)。
+
 已有安装执行 `python3 scripts/install_memory.py`，空闲时重载 gateway 插件、重启内部接口；退出应用后构建新应用。不需要重设人设、模型或定时任务。
 
 ## 1.14.1：读取回忆少争一把写锁

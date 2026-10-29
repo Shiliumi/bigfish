@@ -6,17 +6,21 @@ import { fileURLToPath } from 'node:url';
 import { createModelSettings } from '../ui/server/models.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
-const interactive = process.argv[4] === '--interactive';
-if (process.argv[2] !== '--live' || !(process.argv.length === 4 || process.argv.length === 5 && interactive)) {
-  console.error('Usage: node scripts/probe_conversation_play.mjs --live <local-baseline-commit> [--interactive]\nUses the configured paid API and the real background allowance; saves private results in .setup/.');
+const options = process.argv.slice(4);
+const interactive = options.includes('--interactive');
+const selected = options.find(value => value.startsWith('--fixture='));
+if (process.argv[2] !== '--live' || !process.argv[3] || options.some(value => value !== '--interactive' && value !== selected) || new Set(options).size !== options.length || selected && !/^--fixture=[a-z][a-z0-9_]*\.json$/.test(selected)) {
+  console.error('Usage: node scripts/probe_conversation_play.mjs --live <local-baseline-commit> [--interactive] [--fixture=name.json]\nUses the configured paid API and the real background allowance; saves private results in .setup/.');
   process.exit(2);
 }
 const base = execFileSync('git', ['rev-parse', '--verify', '--end-of-options', process.argv[3] + '^{commit}'], { cwd: root, encoding: 'utf8' }).trim();
 const before = execFileSync('git', ['show', base + ':config/SOUL.md'], { cwd: root, encoding: 'utf8' });
 let after = await readFile(new URL('../config/SOUL.md', import.meta.url), 'utf8');
-const fixtureText = await readFile(new URL('../tests/fixtures/' + (interactive ? 'conversation_dialogues.json' : 'conversation_play.json'), import.meta.url), 'utf8');
+const fixtureName = selected?.slice('--fixture='.length) || (interactive ? 'conversation_dialogues.json' : 'conversation_play.json');
+const fixtureText = await readFile(new URL('../tests/fixtures/' + fixtureName, import.meta.url), 'utf8');
 const fixture = JSON.parse(fixtureText);
-if (interactive) {
+if (!Array.isArray(fixture.cases) || !fixture.cases.length || fixture.cases.some(item => typeof item.id !== 'string' || !Array.isArray(item.history) || (interactive ? !Array.isArray(item.users) || !item.users.length || item.users.some(value => typeof value !== 'string') : typeof item.user !== 'string'))) throw Error('Invalid conversation fixture.');
+if (interactive && fixture.candidate) {
   // Keep experimental prompt text out of the installed persona and normal fixed replay.
   const start = after.indexOf('<!-- FISH_CONVERSATION_BEGIN -->');
   const end = after.indexOf('<!-- FISH_CONVERSATION_END -->');
@@ -63,9 +67,9 @@ await mkdir(directory, { recursive: true });
 const output = new URL((interactive ? 'conversation-dialogues-' : 'conversation-play-') + new Date().toISOString().replace(/[:.]/g, '-') + '.json', directory);
 const textOnly = '此回放只提供文字对话，没有可执行工具。请直接续写下一条聊天文字，不输出工具调用、工具标记或表情包命令，不声称执行了未执行的动作。';
 const hash = value => createHash('sha256').update(value).digest('hex');
-const report = { baseline: base, model: connection.model, settings, scope: fixture.scope, textOnly,
-  comparison: interactive ? 'baseline versus experimental candidate; not an installed persona change' : 'baseline versus public working tree',
-  candidateParagraph: interactive ? fixture.candidate.paragraph : undefined,
+const report = { baseline: base, model: connection.model, settings, scope: fixture.scope, textOnly, fixture: fixtureName,
+  comparison: interactive && fixture.candidate ? 'baseline versus experimental candidate; not an installed persona change' : 'baseline versus public working tree',
+  candidateParagraph: interactive ? fixture.candidate?.paragraph : undefined,
   hashes: { fixture: hash(fixtureText), beforeSoul: hash(before), afterSoul: hash(after), beforeProvider: hash(pluginBefore), afterProvider: hash(pluginAfter) }, records: [] };
 
 function ledger(data) {
