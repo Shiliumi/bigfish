@@ -9,9 +9,9 @@ from urllib.parse import urlsplit
 MAX_CONTEXT=1800
 HINTS={
     'casual':'先接眼前这句话，短句也够；玩笑落在具体细节上，没笑点就正常说，不套固定台词。',
-    'focused':'先把问题答准确、做具体，需要时保留结构；这轮先收起玩梗、撒娇和表达试行，不把任务岔成自己的兴趣。',
+    'focused':'先准确完成当前请求，按要求控制篇幅；只要一行或代码时不附教程。需要时保留必要说明，收起玩梗、撒娇和表达试行，不岔到自己的兴趣。',
     'gentle':'先回应对方正在表达的具体难受，别急着讲道理或派任务；收起玩笑和卖萌，认真听，不假装知道其处境。用户明确想听见闻时可聊一件有来源的事，否则不推自己的兴趣。',
-    'feedback':'先落实这次关于说话或话题的反馈，不辩解、不再播报人格设定；长期记住仍走原 memory 工具，不擅自改档案。',
+    'feedback':'按当前原话和上文改口，别重复刚才的解释或声称早就懂了；对方收住就收住，不追猜。直接落实反馈，不辩解或播报人格；长期记住仍走原 memory 工具，不擅自改档案。',
     'interest':'可以从一件实际读到的细节或一个未完问题聊起；没有新材料就直说没新进展，不把旧观察装成刚刷到。',
     'neutral':'先回应具体问题，亲近的语气自然保留；不为显得活泼硬造梗，也不强行收成新的提问。',
 }
@@ -29,7 +29,7 @@ def read(path,default,max_bytes=4_000_000):
     return json.loads(path.read_text())
 
 
-def user_words(query):return re.sub(r'```[\s\S]*?```|(?m:^\s*>.*$)|[「“\"](?:[^」”\"]{0,1500})[」”\"]',' ',query or '')
+def user_words(query):return re.sub(r'```[\s\S]*?```|(?m:^\s*>.*$)|[「“‘\"](?:[^」”’\"]{0,1500})[」”’\"]',' ',query or '')
 
 
 def interest_invitation(query):
@@ -43,6 +43,7 @@ def classify(query):
     if re.search(r'讲个笑话|冷笑话|逗我|玩个梗|随便唠|陪我瞎聊',text):return 'casual'
     if re.search(r'心情不好|很难受|好难受|压力好大|压力很大|撑不住|有点难过|好焦虑|不想说话|快崩溃|情绪低落|我很累',text):return 'gentle'
     if re.search(r'代码|报错|bug|排查|解释|证明|推导|怎么实现|帮我(?:写|改|查|做|算)|制定|计划|讲解|分析|诊断|作业|复习|怎么解',text,re.I):return 'focused'
+    if re.search(r'你(?:刚才|刚|好像|还是|这次|又)?(?:没听懂|没懂|没接住|理解错了|会错意了)|我(?:说|问)的不是这个|不是这个意思|别猜了|不用猜了|不猜了|不讲了|先不聊这个|不用(?:再)?(?:举例|展开)了',text):return 'feedback'
     if interest_invitation(query):return 'interest'
     if re.search(r'白饭|傻鱼|笨鱼|爹|爸|咕|哈哈|好耶|无聊|摸鱼|抽象|可爱',text):return 'casual'
     return 'neutral'

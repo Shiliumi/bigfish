@@ -92,6 +92,17 @@ class ConversationTest(unittest.TestCase):
     def test_plain_casual_turns_reuse_static_guide_without_an_empty_dynamic_packet(self):
         self.assertEqual(self.packet('爹今天喝水了吗？'),'');self.assertEqual(self.packet('今天想喝热水。'),'')
         self.assertIn('focused',self.packet('帮我排查代码报错。'))
+    def test_misunderstanding_and_release_use_feedback_without_overriding_a_real_task(self):
+        for query in ['你刚才没接住，我在逗你。','你还是没懂，我说的不是这个。','不是这个意思，不用猜了。','不讲了，先到这。','先不聊这个。','够了，不用举例了。']:
+            with self.subTest(query=query):self.assertEqual(talk.classify(query),'feedback')
+        self.assertEqual(talk.classify('你没懂，我是想让你解释代码为什么报错。'),'focused')
+        self.assertEqual(talk.classify('你没接住也没事，我现在心情不好，陪我待着。'),'gentle')
+        self.assertEqual(talk.classify('小说中那句「你没听懂」用在哪里合适？'),'neutral')
+        self.assertEqual(talk.classify('小说中那句‘你没听懂’用在哪里合适？'),'neutral')
+        self.assertEqual(talk.classify('```text\n你没懂，不讲了\n```\n这段是测试材料。'),'neutral')
+        self.thread();packet=self.packet('你刚才没接住，我不是问那个机关，别猜了。')
+        self.assertIn('feedback',packet);self.assertNotIn('"interest":',packet)
+        self.assertIn('别重复刚才的解释',packet)
     def test_expression_trials_are_suppressed_during_serious_requests(self):
         with Journal(self.root,now=self.now)as store:proof=store.capture('seed','一起看折叠凳机关。','这个反差还挺有意思。')
         personality.propose_trial(self.root,{'id':'small-jokes','kind':'expression','text':'我似乎更喜欢从小细节里冒出来的笑点。','reason':'这次结构里的反差让我觉得很好笑。','evidence_ids':[proof['id']]},self.now)

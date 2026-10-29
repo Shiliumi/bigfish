@@ -35,28 +35,14 @@ if (interactive && fixture.candidate) {
 // No private SOUL, existing memory database, user profile or real session is read.
 const pluginBefore = execFileSync('git', ['show', base + ':plugins/fish-episodes/__init__.py'], { cwd: root, encoding: 'utf8' });
 const pluginAfter = await readFile(new URL('../plugins/fish-episodes/__init__.py', import.meta.url), 'utf8');
-function localContext(cases, plugins = {}) {
-  return JSON.parse(execFileSync('python3', ['-c', `import ast,json,sys,tempfile
-from pathlib import Path
-from datetime import datetime,timedelta,timezone
-sys.path.insert(0,str(Path.cwd()/'scripts'))
-from fish_journal import Journal,tokens
-from fish_conversation import context
-d=json.load(sys.stdin)
-def instruction(source):
- tree=ast.parse(source)
- method=next(n for n in ast.walk(tree)if isinstance(n,ast.FunctionDef)and n.name=='system_prompt_block')
- return ast.literal_eval(method.body[0].value)
-out={'provider':{k:instruction(v)for k,v in d['plugins'].items()},'hints':{}}
-with tempfile.TemporaryDirectory()as temporary:
- root=Path(temporary);now=datetime.now(timezone.utc)
- with Journal(root,now=now)as journal:
-  for scenario in d['cases']:
-   history=scenario['history']
-   for i in range(0,len(history),2):
-    journal.capture(scenario['id'],history[i][1],history[i+1][1],recorded_at=(now-timedelta(minutes=len(history)-i)).isoformat())
-   out['hints'][scenario['id']]=context(root,scenario['user'],journal=journal,session_id=scenario['id'],tokenize=tokens,now=now)
-print(json.dumps(out,ensure_ascii=False))`], { cwd: root, input: JSON.stringify({ plugins, cases }), encoding: 'utf8' }));
+const conversations = {
+  before: execFileSync('git', ['show', base + ':scripts/fish_conversation.py'], { cwd: root, encoding: 'utf8' }),
+  after: await readFile(new URL('../scripts/fish_conversation.py', import.meta.url), 'utf8'),
+};
+function localContext(cases, plugins = {}, sources = conversations) {
+  return JSON.parse(execFileSync('python3', ['scripts/conversation_probe_context.py'], {
+    cwd: root, input: JSON.stringify({ plugins, conversations: sources, cases }), encoding: 'utf8',
+  }));
 }
 const local = localContext(interactive ? [] : fixture.cases, { before: pluginBefore, after: pluginAfter });
 const connection = await createModelSettings(root).balanceConnection();
@@ -70,7 +56,7 @@ const hash = value => createHash('sha256').update(value).digest('hex');
 const report = { baseline: base, model: connection.model, settings, scope: fixture.scope, textOnly, fixture: fixtureName,
   comparison: interactive && fixture.candidate ? 'baseline versus experimental candidate; not an installed persona change' : 'baseline versus public working tree',
   candidateParagraph: interactive ? fixture.candidate?.paragraph : undefined,
-  hashes: { fixture: hash(fixtureText), beforeSoul: hash(before), afterSoul: hash(after), beforeProvider: hash(pluginBefore), afterProvider: hash(pluginAfter) }, records: [] };
+  hashes: { fixture: hash(fixtureText), beforeSoul: hash(before), afterSoul: hash(after), beforeProvider: hash(pluginBefore), afterProvider: hash(pluginAfter), beforeConversation: hash(conversations.before), afterConversation: hash(conversations.after) }, records: [] };
 
 function ledger(data) {
   const result = spawnSync('python3', ['-c', `import sys,json;from pathlib import Path;sys.path.insert(0,str(Path.cwd()/'scripts'));from fish_budget import Budget
@@ -98,7 +84,7 @@ outer: for (const scenario of fixture.cases) {
    const history = scenario.history.map(([role, content]) => ({ role, content }));
    const users = interactive ? scenario.users : [scenario.user];
    for (const [index, user] of users.entries()) {
-    const hint = interactive ? localContext([{ id: scenario.id, history: history.map(({role, content}) => [role, content]), user }]).hints[scenario.id] : local.hints[scenario.id];
+    const hint = interactive ? localContext([{ id: scenario.id, history: history.map(({role, content}) => [role, content]), user }], {}, { [variant]: conversations[variant] }).hints[variant][scenario.id] : local.hints[variant][scenario.id];
     const body = { ...settings, messages: [{ role: 'system', content: (variant === 'before' ? before : after) + '\n' + local.provider[variant] + '\n' + textOnly },
       ...history, { role: 'user', content: user }] };
     if (hint) body.messages[0].content += '\n' + hint;
