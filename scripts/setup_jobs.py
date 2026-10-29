@@ -46,6 +46,7 @@ def main():
         if matches:
             command += ["--no-continuity"]
         subprocess.run(command, check=True)
+    subprocess.run([shutil.which('python3')or'python3',str(ROOT/'scripts/install_job_tools.py')],check=True)
 
 
 if __name__ == "__main__":

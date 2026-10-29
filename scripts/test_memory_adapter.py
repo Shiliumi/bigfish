@@ -41,6 +41,11 @@ class AdapterTest(unittest.TestCase):
         self.initialize('cron');self.provider.sync_turn('自动任务','任务完成');self.assertEqual(self.provider.get_tool_schemas(),[])
         self.initialize();self.provider.on_turn_start(1,'自动投递',author_is_bot=True);self.provider.sync_turn('自动投递','自动回答')
         with Journal(self.root) as journal:self.assertEqual(journal.status()['total'],0)
+    def test_cron_and_subagents_do_not_advertise_unavailable_shared_memory_tools(self):
+        self.initialize();primary=self.provider.system_prompt_block();self.assertIn('fish_recall',primary)
+        for scope in ['cron','subagent']:
+            self.initialize(scope);self.assertEqual(self.provider.system_prompt_block(),'');self.assertEqual(self.provider.get_tool_schemas(),[])
+        self.initialize();self.assertEqual(self.provider.system_prompt_block(),primary)
     def test_foreign_home_never_binds_to_project_memory(self):
         with self.assertRaises(ValueError):self.provider.initialize('other',hermes_home=str(self.root/'foreign'))
 

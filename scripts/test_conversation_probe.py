@@ -1,8 +1,11 @@
 import unittest
-from conversation_probe_context import build
+from conversation_probe_context import build,instruction
 
 
 class ConversationProbeTest(unittest.TestCase):
+    def test_guarded_provider_still_exposes_its_literal_primary_instruction(self):
+        source="class Provider:\n def system_prompt_block(self):\n  if self.primary is False:return ''\n  return 'primary instruction'\n"
+        self.assertEqual(instruction(source),'primary instruction')
     def test_before_and_after_use_their_own_context_implementation(self):
         old="def context(root,query,**kwargs):return 'old hints for '+query\n"
         new="def context(root,query,**kwargs):return 'new hints for '+query\n"

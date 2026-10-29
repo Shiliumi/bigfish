@@ -12,7 +12,7 @@ from fish_journal import Journal,tokens
 def instruction(source):
     tree=ast.parse(source)
     method=next(n for n in ast.walk(tree)if isinstance(n,ast.FunctionDef)and n.name=='system_prompt_block')
-    return ast.literal_eval(method.body[0].value)
+    return ast.literal_eval(next(node.value for node in method.body if isinstance(node,ast.Return)))
 
 
 def build(data):

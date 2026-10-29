@@ -157,6 +157,12 @@ swiftc desktop/PetBehavior.swift scripts/test_pet_behavior.swift -o /tmp/bigfish
 
 桌宠改编自 [PC2005-cloud/dsh-pet](https://github.com/PC2005-cloud/dsh-pet)，角色设计来自 [上善无形](https://space.bilibili.com/4456176) 与 [ZipZipPipe](https://space.bilibili.com/4168597)，遵循 CC BY-NC-SA 4.0 及上游的非商业条件。头像与表情来自 [可以叫我云大人 / 雾雪](https://kiriyuki.com)，保留作者说明。探头图片是基于该角色参考的 AI 辅助补绘，仍按角色素材条件处理。
 
+## 按任务精简后台上下文 · 记忆适配器 1.6.2
+
+冲浪和夜间记忆整理现在各用所需工具，保留浏览、文件读写及整理所需的核心记忆工具；明确设置过的组合、主聊天和学习搭子不变。适配器也不再向 cron / 子代理注入本来不可用的共同回忆工具说明。
+
+离线构造中，固定系统提示加工具 schema 的总字节量分别减少约 28% 和 30%，核心资料及必要工具参数保持一致；不是日常 token 或账单节省率。258 项 Python 检查通过，无新增界面或日常模型调用。安装与量测见 [后台上下文说明](docs/cron-context.md)。
+
 ## 后台预算适配器 1.0.1：中断后如实收好
 
 冲浪预检会在本机恢复已经验证、但写到一半的收尾事务；核对到对应执行结束却没有回执时，单独记为中断。保留阅读、兴趣、人格与当天出发计数，不凭空生成发现或重新消耗模型补写。没有新增面板或定时任务。
