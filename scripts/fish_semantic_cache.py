@@ -1,4 +1,4 @@
-"""Experimental, disposable vectors. Source SQLite remains authoritative; no model imports."""
+"""Experimental derived vectors in source SQLite, with transactional invalidation; no model imports."""
 from contextlib import closing
 from dataclasses import dataclass
 from datetime import datetime,timezone
@@ -9,9 +9,19 @@ from numbers import Real
 from pathlib import Path
 import sqlite3
 import struct
-from fish_journal import instant
+from fish_journal import instant,SCHEMA_VERSION
 
 PIPELINE={'version':1,'window':280,'stride':220,'normalization':'l2-f32-le'}
+CACHE_SCHEMA=2
+SOURCE_FIELDS=('id','session_id','source_ref','recorded_at','summary','excerpt','status','revision','pinned',
+               'valid_from','valid_until','corrected_at','correction_source','kind','aliases')
+OBJECTS={
+    'fish_semantic_episode_update':('CREATE TRIGGER fish_semantic_episode_update AFTER UPDATE OF '+','.join(SOURCE_FIELDS)+
+        ' ON episodes WHEN '+' OR '.join('OLD.'+name+' IS NOT NEW.'+name for name in SOURCE_FIELDS)+
+        ' BEGIN DELETE FROM fish_semantic_vectors WHERE episode_id=OLD.id OR episode_id=NEW.id; END'),
+    'fish_semantic_episode_delete':'CREATE TRIGGER fish_semantic_episode_delete AFTER DELETE ON episodes BEGIN DELETE FROM fish_semantic_vectors WHERE episode_id=OLD.id; END',
+    'fish_semantic_source':'CREATE INDEX fish_semantic_source ON fish_semantic_vectors(episode_id)',
+}
 
 
 @dataclass(frozen=True)
@@ -38,12 +48,37 @@ def live(row,now):
     except (ValueError,TypeError):return False
 
 
+def cache_schema(db):
+    if not db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='fish_semantic_meta'").fetchone():return None
+    row=db.execute("SELECT value FROM fish_semantic_meta WHERE key='schema'").fetchone()
+    if not row:raise ValueError('Cache schema marker missing; source untouched.')
+    return row[0]
+
+
+def discard_cache(journal):
+    """Remove only this optional derived schema, atomically; never delete a database file."""
+    db=journal.db
+    if db.in_transaction:raise ValueError('Finish the caller transaction before discarding derived data.')
+    if db.execute('PRAGMA user_version').fetchone()[0]!=SCHEMA_VERSION:raise ValueError('Primary journal schema is incompatible; left unchanged.')
+    with db:
+        db.execute('BEGIN IMMEDIATE');version=cache_schema(db)
+        if db.execute('PRAGMA user_version').fetchone()[0]!=SCHEMA_VERSION:raise ValueError('Primary journal schema is incompatible; left unchanged.')
+        if version is None:
+            if db.execute("SELECT 1 FROM sqlite_master WHERE name IN ('fish_semantic_vectors','fish_semantic_episode_update','fish_semantic_episode_delete','fish_semantic_source')").fetchone():raise ValueError('Derived schema has no ownership marker; left unchanged.')
+            return False
+        if version!=str(CACHE_SCHEMA):raise ValueError('Cache schema is newer or incompatible; left unchanged.')
+        for name,sql in OBJECTS.items():db.execute('DROP '+('INDEX'if sql.startswith('CREATE INDEX')else 'TRIGGER')+' IF EXISTS '+name)
+        db.execute('DROP TABLE IF EXISTS fish_semantic_vectors');db.execute('DROP TABLE fish_semantic_meta')
+    return True
+
+
 class SemanticCache:
     def __init__(self,journal,identity):
         self.root=Path(journal.root).resolve();directory=self.root/'data/memory'
-        self.source=directory/'episodes.sqlite3';path=directory/'semantic-cache.sqlite3'
-        if not directory.resolve().is_relative_to(self.root)or not self.source.resolve().is_relative_to(directory.resolve())or not path.resolve().is_relative_to(directory.resolve()):raise ValueError('Cache must stay in its own memory directory.')
-        if path.exists()and path.samefile(self.source):raise ValueError('Cache must not alias the source database.')
+        self.source=directory/'episodes.sqlite3';legacy=directory/'semantic-cache.sqlite3'
+        if not directory.resolve().is_relative_to(self.root)or not self.source.resolve().is_relative_to(directory.resolve()):raise ValueError('Cache must stay in its own memory directory.')
+        # Old experiments used a separate file. Never silently retain, migrate or unlink it.
+        if legacy.exists()or legacy.is_symlink():raise ValueError('Legacy experimental cache requires explicit removal; source untouched.')
         self.file_identity=(self.source.stat().st_dev,self.source.stat().st_ino)
         self.home=hashlib.sha256((str(self.source.resolve())+repr(self.file_identity)).encode()).hexdigest()
         self.dimension=identity.get('dimension')
@@ -53,32 +88,45 @@ class SemanticCache:
             if not isinstance(value,str)or len(value)!=64 or any(c not in '0123456789abcdef'for c in value):raise ValueError('Public model artifact hashes required.')
         if not identity.get('repo')or not identity.get('revision')or not identity.get('pooling')or 'query_instruction'not in identity:raise ValueError('Complete model identity required.')
         self.model=hashlib.sha256(json.dumps({'identity':identity,'pipeline':PIPELINE},sort_keys=True,separators=(',',':')).encode()).hexdigest()
-        self.db=sqlite3.connect(path,timeout=5);self.db.row_factory=sqlite3.Row
+        self.metadata={'schema':str(CACHE_SCHEMA),'home':self.home,'model':self.model}
+        self.db=sqlite3.connect(self.source.resolve().as_uri()+'?mode=rw',uri=True,timeout=5);self.db.row_factory=sqlite3.Row
         try:
-            path.chmod(0o600)
-            version=self.db.execute('PRAGMA user_version').fetchone()[0]
-            if version not in (0,1):raise ValueError('Cache schema is newer; left unchanged.')
-            self.db.execute('PRAGMA journal_mode=WAL')
-            if version==1 and self._owns():return
+            if self.db.execute('PRAGMA user_version').fetchone()[0]!=SCHEMA_VERSION:raise ValueError('Primary journal schema is incompatible; left unchanged.')
+            version=self._schema()
+            if version not in (None,str(CACHE_SCHEMA)):raise ValueError('Cache schema is newer or incompatible; left unchanged.')
+            if version and self._owns()and self._objects_ready():return
             with self.db:
                 self.db.execute('BEGIN IMMEDIATE')
-                self.db.execute('CREATE TABLE IF NOT EXISTS cache_meta(key TEXT PRIMARY KEY,value TEXT NOT NULL)')
-                self.db.execute('CREATE TABLE IF NOT EXISTS vectors(model TEXT NOT NULL,episode_id TEXT NOT NULL,revision INTEGER NOT NULL,fingerprint TEXT NOT NULL,chunk_no INTEGER NOT NULL,vector BLOB NOT NULL,PRIMARY KEY(model,episode_id,chunk_no))')
-                old=dict(self.db.execute('SELECT key,value FROM cache_meta'))
-                if old!={'home':self.home,'model':self.model}:
-                    self.db.execute('DELETE FROM vectors');self.db.execute('DELETE FROM cache_meta')
-                    self.db.executemany('INSERT INTO cache_meta VALUES(?,?)',[('home',self.home),('model',self.model)])
-                self.db.execute('PRAGMA user_version=1')
+                # Recheck after waiting for another initializer; never downgrade its schema.
+                if self.db.execute('PRAGMA user_version').fetchone()[0]!=SCHEMA_VERSION:raise ValueError('Primary journal schema is incompatible; left unchanged.')
+                if self._schema()not in (None,str(CACHE_SCHEMA)):raise ValueError('Cache schema is newer or incompatible; left unchanged.')
+                if self._schema()and self._owns()and self._objects_ready():return
+                if not set(SOURCE_FIELDS).issubset({r['name']for r in self.db.execute('PRAGMA table_info(episodes)')}):raise ValueError('Source columns incomplete; left unchanged.')
+                self.db.execute('CREATE TABLE IF NOT EXISTS fish_semantic_meta(key TEXT PRIMARY KEY,value TEXT NOT NULL)')
+                self.db.execute('CREATE TABLE IF NOT EXISTS fish_semantic_vectors(model TEXT NOT NULL,episode_id TEXT NOT NULL,revision INTEGER NOT NULL,fingerprint TEXT NOT NULL,chunk_no INTEGER NOT NULL,vector BLOB NOT NULL,PRIMARY KEY(model,episode_id,chunk_no))')
+                self.db.execute('DELETE FROM fish_semantic_vectors');self.db.execute('DELETE FROM fish_semantic_meta')
+                self.db.executemany('INSERT INTO fish_semantic_meta VALUES(?,?)',self.metadata.items())
+                for name,sql in OBJECTS.items():
+                    self.db.execute('DROP '+('INDEX'if sql.startswith('CREATE INDEX')else 'TRIGGER')+' IF EXISTS '+name)
+                    self.db.execute(sql)
         except BaseException:self.db.close();raise
 
     def __enter__(self):return self
     def __exit__(self,*args):self.db.close()
 
+    def _schema(self):
+        return cache_schema(self.db)
+
+    def _objects_ready(self):
+        found={r['name']:r['sql']for r in self.db.execute("SELECT name,sql FROM sqlite_master WHERE name IN ('fish_semantic_episode_update','fish_semantic_episode_delete','fish_semantic_source')")}
+        return found==OBJECTS
+
     def _owns(self):
         try:
-            if (self.source.stat().st_dev,self.source.stat().st_ino)!=self.file_identity:return False
-            return dict(self.db.execute('SELECT key,value FROM cache_meta'))=={'home':self.home,'model':self.model}
-        except OSError:return False
+            status=self.source.stat()
+            if (status.st_dev,status.st_ino)!=self.file_identity:return False
+            return dict(self.db.execute('SELECT key,value FROM fish_semantic_meta'))==self.metadata
+        except (OSError,sqlite3.OperationalError):return False
 
     def _sources(self,now):
         if not self._owns():return {}
@@ -91,12 +139,13 @@ class SemanticCache:
         return row is not None and row['revision']==job.revision and fingerprint(row)==job.fingerprint
 
     def _remove(self,ident,revision,stamp,model=None):
-        self.db.execute('DELETE FROM vectors WHERE model=? AND episode_id=? AND revision=? AND fingerprint=?',(model or self.model,ident,revision,stamp))
+        self.db.execute('DELETE FROM fish_semantic_vectors WHERE model=? AND episode_id=? AND revision=? AND fingerprint=?',(model or self.model,ident,revision,stamp))
 
     def prune(self,now=None):
+        if not self._owns():return
         now=instant(now or datetime.now(timezone.utc));sources=self._sources(now)
         stale=[]
-        for row in self.db.execute('SELECT DISTINCT episode_id,revision,fingerprint FROM vectors WHERE model=?',(self.model,)):
+        for row in self.db.execute('SELECT DISTINCT episode_id,revision,fingerprint FROM fish_semantic_vectors WHERE model=?',(self.model,)):
             source=sources.get(row['episode_id'])
             if not source or source['revision']!=row['revision']or fingerprint(source)!=row['fingerprint']:stale.append(row)
         if not stale:return
@@ -106,8 +155,9 @@ class SemanticCache:
             for row in stale:self._remove(row['episode_id'],row['revision'],row['fingerprint'])
 
     def prepare(self,now=None,limit=64):
+        if not self._owns():return []
         now=instant(now or datetime.now(timezone.utc));self.prune(now);sources=self._sources(now);jobs=[]
-        cached={r['episode_id']:(r['revision'],r['fingerprint'],r['count'])for r in self.db.execute('SELECT episode_id,revision,fingerprint,COUNT(*) count FROM vectors WHERE model=? GROUP BY episode_id,revision,fingerprint',(self.model,))}
+        cached={r['episode_id']:(r['revision'],r['fingerprint'],r['count'])for r in self.db.execute('SELECT episode_id,revision,fingerprint,COUNT(*) count FROM fish_semantic_vectors WHERE model=? GROUP BY episode_id,revision,fingerprint',(self.model,))}
         for row in sources.values():
             body=meaning(row);aliases='\n'.join(json.loads(row['aliases']))
             texts=tuple(body[i:i+PIPELINE['window']]+('\n'+aliases if aliases else '')for i in range(0,len(body),PIPELINE['stride']))
@@ -138,16 +188,17 @@ class SemanticCache:
         with self.db:
             self.db.execute('BEGIN IMMEDIATE')
             if not self._owns()or not self._matches(job,self._sources(now).get(job.ident)):return False
-            self.db.execute('DELETE FROM vectors WHERE model=? AND episode_id=?',(self.model,job.ident))
-            self.db.executemany('INSERT INTO vectors VALUES(?,?,?,?,?,?)',[(self.model,job.ident,job.revision,job.fingerprint,i,data)for i,data in enumerate(packed)])
+            self.db.execute('DELETE FROM fish_semantic_vectors WHERE model=? AND episode_id=?',(self.model,job.ident))
+            self.db.executemany('INSERT INTO fish_semantic_vectors VALUES(?,?,?,?,?,?)',[(self.model,job.ident,job.revision,job.fingerprint,i,data)for i,data in enumerate(packed)])
         if not self._matches(job,self._sources(now).get(job.ident)):
             with self.db:self._remove(job.ident,job.revision,job.fingerprint)
             return False
         return True
 
     def rank(self,vector,now=None,limit=5,exclude_session='',allowed_ids=None):
+        if not self._owns():return []
         now=instant(now or datetime.now(timezone.utc));query=self._vector(vector);self.prune(now);sources=self._sources(now);scores={};corrupt=[]
-        for row in self.db.execute('SELECT * FROM vectors WHERE model=?',(self.model,)):
+        for row in self.db.execute('SELECT * FROM fish_semantic_vectors WHERE model=?',(self.model,)):
             source=sources.get(row['episode_id'])
             if not source or source['session_id']==exclude_session or source['revision']!=row['revision']or fingerprint(source)!=row['fingerprint']:continue
             if allowed_ids is not None and row['episode_id']not in allowed_ids:continue
@@ -158,10 +209,11 @@ class SemanticCache:
                 scores[ident]={'id':ident,'revision':row['revision'],'fingerprint':row['fingerprint'],'model':self.model,'home':self.home,'score':score}
         if corrupt:
             with self.db:
-                for row in corrupt:self.db.execute('DELETE FROM vectors WHERE model=? AND episode_id=? AND chunk_no=? AND revision=? AND fingerprint=? AND vector=?',(self.model,row['episode_id'],row['chunk_no'],row['revision'],row['fingerprint'],row['vector']))
+                for row in corrupt:self.db.execute('DELETE FROM fish_semantic_vectors WHERE model=? AND episode_id=? AND chunk_no=? AND revision=? AND fingerprint=? AND vector=?',(self.model,row['episode_id'],row['chunk_no'],row['revision'],row['fingerprint'],row['vector']))
         return sorted(scores.values(),key=lambda r:(-r['score'],r['id']))[:max(1,min(10,limit))]if self._owns()else []
 
     def resolve(self,candidates,now=None):
+        if not self._owns():return []
         now=instant(now or datetime.now(timezone.utc));self.prune(now);sources=self._sources(now);result=[]
         for candidate in candidates[:10]:
             if candidate.get('home')!=self.home or candidate.get('model')!=self.model:continue

@@ -50,6 +50,7 @@ def lifecycle(encoder,root,now):
         query=encoder.encode(['之前铜色齿轮装好了吗'],query=True)[0]
         ranked=cache.rank(query,now)
         journal.update(row['id'],1,summary='更正：讨论的是银色弹簧，已经装回正确位置。')
+        checks['correction_removes_vectors_at_source_commit']=journal.db.execute('SELECT COUNT(*) FROM fish_semantic_vectors').fetchone()[0]==0
         checks['correction_blocks_late_write']=not cache.publish(old_job,old_vectors,now)
         checks['correction_blocks_ranked_snapshot']=cache.resolve(ranked,now)==[]
         changed=cache.prepare(now)
@@ -60,15 +61,16 @@ def lifecycle(encoder,root,now):
         checks['only_changed_source_reencoded']=len(changed)==1 and cache.prepare(now)==[]
         ranked=cache.rank(query,now)
         journal.update(row['id'],2,forget=True)
+        checks['forget_removes_vectors_at_source_commit']=journal.db.execute('SELECT COUNT(*) FROM fish_semantic_vectors').fetchone()[0]==0
         checks['forget_blocks_late_write']=not cache.publish(current_job,current_vectors,now)
         checks['forget_blocks_old_candidates']=cache.resolve(ranked,now)==[] and cache.rank(query,now)==[]
-        checks['forget_prunes_on_next_access']=cache.db.execute('SELECT COUNT(*) FROM vectors').fetchone()[0]==0
+        checks['forget_stays_empty_after_access']=cache.db.execute('SELECT COUNT(*) FROM fish_semantic_vectors').fetchone()[0]==0
 
         expiry=journal.capture('fiction-expiry','临时在木盒里放一枚绿色纽扣。','只保留一小时。')
         journal.update(expiry['id'],1,valid_until=(now+timedelta(hours=1)).isoformat())
         fill(encoder,cache,now);ranked=cache.rank(query,now)
         checks['expiry_boundary_blocks_candidates']=cache.resolve(ranked,now+timedelta(hours=1))==[]
-        checks['expiry_boundary_prunes_vectors']=cache.db.execute('SELECT COUNT(*) FROM vectors').fetchone()[0]==0
+        checks['expiry_boundary_prunes_vectors']=cache.db.execute('SELECT COUNT(*) FROM fish_semantic_vectors').fetchone()[0]==0
 
         now+=timedelta(hours=1);journal.now=now
         alias=journal.capture('fiction-alias','讨论纸制风车的叶片。','四片叶子。')
@@ -99,6 +101,7 @@ def evaluate(directory):
         with Journal(root/'replay',now=now)as journal:
             before=source_rows(journal)
             fresh,fresh_timing=sample(encoder,journal,cases,mapping)
+            allocated_before=journal.db.execute('PRAGMA page_count').fetchone()[0]*journal.db.execute('PRAGMA page_size').fetchone()[0]
             started=time.perf_counter()
             with SemanticCache(journal,IDENTITY)as cache:cold=fill(encoder,cache,now)
             cold['prepare_encode_publish_ms']=round((time.perf_counter()-started)*1000,2)
@@ -121,13 +124,17 @@ def evaluate(directory):
                     margin=dense[0]['score']-dense[1]['score']if len(dense)>1 else dense[0]['score']if dense else 0
                     cached={**reference,'dense':dense,'margin':margin}
                     assert choose(reference,.55,.06)==choose(cached,.55,.06),'The previously fixed gate changed decisions.'
+                    recalled=journal.recall(case['query'])
+                    actual_lexical=[mapping[r['id']]for r in json.loads(recalled.split('\n',1)[1])]if recalled else []
+                    assert actual_lexical==reference['lexical'],'Derived cache changed existing lexical recall.'
                     compared.append({'query':case['query'],'top5':[r['key']for r in dense],'hybrid':choose(cached,.55,.06)})
                 assert largest_difference<2e-5,'Unexpected float32 score drift.'
                 changes=cache.db.total_changes-initial_changes
                 assert changes==0,'Healthy warm lookup must not mutate the cache.'
                 assert source_rows(journal)==before,'Read/encoding work changed primary sources.'
                 cache.db.execute('PRAGMA wal_checkpoint(TRUNCATE)')
-                cache_bytes=(journal.root/'data/memory/semantic-cache.sqlite3').stat().st_size
+                database_bytes=(journal.root/'data/memory/episodes.sqlite3').stat().st_size
+                allocated_after=journal.db.execute('PRAGMA page_count').fetchone()[0]*journal.db.execute('PRAGMA page_size').fetchone()[0]
             checks=lifecycle(encoder,root/'lifecycle',now)
         # Actual per-query encoding cost remains, even with every source already cached.
         single=[]
@@ -135,11 +142,13 @@ def evaluate(directory):
             started=time.perf_counter();encoder.encode([case['query']],query=True);single.append((time.perf_counter()-started)*1000)
     peak=resource.getrusage(resource.RUSAGE_SELF).ru_maxrss/(1024**2 if sys.platform=='darwin'else 1024)
     return {'scope':'Fictional temporary stores, exact cached-versus-fresh retrieval parity. No private chat, network, paid API or installed recall changes.',
+            'storage':'source-local derived tables, transactional invalidation; primary schema version unchanged',
             'model':IDENTITY,'fixture_hashes':{name:hashlib.sha256(value).hexdigest()for name,value in raw.items()},
             'dependencies':{name:importlib.metadata.version(name)for name in ['onnxruntime','tokenizers','numpy']},
             'source_rows':fresh_timing['source_rows'],'queries':len(cases),'cold_cache':cold,
             'warm_cache':{'source_encoding_jobs':0,'lookup_logical_writes':changes,'top5_matches':len(compared),
-                          'fixed_gate_matches':len(compared),'max_score_difference':largest_difference,'sqlite_bytes':cache_bytes,
+                          'fixed_gate_matches':len(compared),'max_score_difference':largest_difference,'journal_with_cache_bytes':database_bytes,
+                          'allocated_page_growth_bytes':allocated_after-allocated_before,
                           'rank_and_resolve_median_ms':round(statistics.median(latencies),3),
                           'rank_and_resolve_p95_ms':round(sorted(latencies)[int(.95*(len(latencies)-1))],3)},
             'resources':{'encoder_load_checksum_ms':round(load_ms,2),'query_encoding_median_ms':round(statistics.median(single),3),'peak_rss_mib':round(peak,1)},
