@@ -55,6 +55,7 @@ class GateTest(unittest.TestCase):
         with Journal(self.root,now=self.now) as store:item=store.capture('start','一起看看积木机关','这次机关很吸引我。')
         trial=propose_trial(self.root,{'id':'builds','text':'我似乎喜欢积木里小小的机关。','reason':'这次具体看到了一个有趣的机关。','evidence_ids':[item['id']]},self.now)
         ident=gate.evaluate(self.root,'memory',self.now)['context']['snapshot_id']
+        gate.review(self.root,ident)
         with Journal(self.root,now=self.now+timedelta(days=1)) as store:new=store.capture('next','另一个积木厨房作品','我又想跟着看看这个机关。')
         trial_feedback(self.root,{'id':trial['id'],'revision':trial['revision'],'outcome':'followed','reason':'这次新作品还有另一个具体的机关。','evidence_ids':[new['id']]},self.now+timedelta(days=1))
         self.finish(ident);pending=gate.pending(self.root);self.assertEqual(len(pending['selected']['preference_events']),1)
