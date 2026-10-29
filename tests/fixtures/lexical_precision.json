@@ -1,0 +1,33 @@
+{
+  "scope": "新增虚构边界场景，在筛选实现前固定；检查有效召回、短简称、明确别名与无关目标，不是外部盲测。",
+  "episodes": [
+    {"key":"shared-bike","user":"共享电动自行车已经归还，订单却仍在扣费。","assistant":"核对还车记录后，客服退回了多扣的费用。","day":18},
+    {"key":"camera-stand","user":"小岑借来的相机支架少了一颗螺丝。","assistant":"补上螺丝后，支架才固定稳。","day":18},
+    {"key":"orange-book","user":"读过一本童话，名字是《橘子灯塔》。","assistant":"结尾是母女在雾里点亮灯塔，不是乘船离开。","day":18},
+    {"key":"room808","user":"约在808房间见维修师傅。","assistant":"只记录了房间号，没有保存门锁密码。","day":18},
+    {"key":"lamp-cover","user":"走廊灯罩松动，开门的震动会让它晃。","assistant":"重新扣好固定卡扣后，灯罩不再摇晃。","day":18},
+    {"key":"greenleaf","user":"青禾集做了一个会浇花的木制小机器人。","assistant":"机械臂转动水壶，作者并没有介绍语音功能。","aliases":["青禾","GreenLeaf"],"day":18}
+  ],
+  "queries": [
+    {"query":"共享电动自行车那笔没停的扣费，后来怎么处理？","expected":["shared-bike"]},
+    {"query":"小岑相机支架少螺丝那回，后来怎么固定好的？","expected":["camera-stand"]},
+    {"query":"前面那些想法都不是我要找的，还是翻翻《橘子灯塔》的结尾。","expected":["orange-book"]},
+    {"query":"808","expected":["room808"]},
+    {"query":"走廊灯罩晃动那次怎么弄稳的？","expected":["lamp-cover"]},
+    {"query":"青禾","expected":["greenleaf"]},
+    {"query":"GreenLeaf","expected":["greenleaf"]},
+    {"query":"木间实验室那张折叠凳的连接方式是什么？","expected":["alias"]},
+    {"query":"阳台薄荷叶子发黄时，先调整哪件事？","expected":["plants"]},
+    {"query":"上次那个TCP三次握手，我们用了什么说法？","expected":["network"]},
+    {"query":"共享汽车的违停罚单处理完了吗？","expected":[]},
+    {"query":"走廊地毯的除霉安排是什么时候？","expected":[]},
+    {"query":"搬行李箱之后肩膀恢复得怎么样？","expected":[]},
+    {"query":"更新之后公交路线有没有改？","expected":[]},
+    {"query":"最后报销发票交给哪个部门了？","expected":[]},
+    {"query":"恢复之后打印纸的采购合同续了没？","expected":[]},
+    {"query":"新买的门锁接入智能家居正常吗？","expected":[]},
+    {"query":"室内游泳馆的年卡在哪取？","expected":[]},
+    {"query":"小岑相机的曝光补偿具体是多少？","expected":[],"kind":"missing_detail","related":["camera-stand"]},
+    {"query":"808房间的门锁密码具体是多少？","expected":[],"kind":"missing_detail","related":["room808"]}
+  ]
+}

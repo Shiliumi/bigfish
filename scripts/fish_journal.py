@@ -37,6 +37,9 @@ def instant(value):
         raise ValueError('时间必须包含时区。')
     return value.astimezone(timezone.utc)
 STOP = set('这个 那个 什么 怎么 为什么 可以 知道 觉得 应该 一个 一下 不是 就是 还是 然后 现在 今天 昨天 我们 你们 他们 爸爸 大肥 肥鱼 谢谢 你好 晚安 早安 哈哈 好的 行的 收到 在吗 请问 能不能 上次 那次 之前 以前 后来 记得 还记 帮我 回忆 喜欢 讨厌 事情 内容 说过 聊过 记忆'.split())
+# These may help a manual search, but alone do not identify which event a chat refers to.
+# Keep them in the index: an explicit user alias is still a deliberate reference.
+WEAK_EVIDENCE = set('最后 恢复 处理 更新 正常 重新 完成 安排 终于 目前 解决 结果 当时 时候 然后 以后 换了 自己 一起 推荐 密码 牌子 名字 时间 日期 位置 价格 数量 号码 尾号'.split())
 SECRET = re.compile(r'(?:sk-[A-Za-z0-9_-]{16,}|gh[pousr]_[A-Za-z0-9_]{16,}|github_pat_[A-Za-z0-9_]{16,}|(?i:Bearer\s+)[A-Za-z0-9_.-]{16,}|(?i:(?:api[_ -]?key|token|password|密钥|密码)\s*[:=：]\s*)[^\s,，;；]{8,})')
 
 
@@ -126,6 +129,16 @@ def coverage(chunk,terms):
             if chunk[i:i+2]in terms:covered.update((i,i+1))
         return len(covered)/len(chunk)
     return float(chunk in terms)
+
+
+def explicit_alias(query,aliases):
+    for alias in aliases:
+        value=lexical(alias);pattern=re.escape(value)
+        if not value:continue
+        if value[0].isascii()and value[0].isalnum():pattern=r'(?<![a-z0-9_])'+pattern
+        if value[-1].isascii()and value[-1].isalnum():pattern+=r'(?![a-z0-9_])'
+        if re.search(pattern,query):return True
+    return False
 
 
 def excerpt_for(row,query):
@@ -287,7 +300,7 @@ class Journal:
                 self._index(self.get(ident))
         return self.get(ident)
 
-    def search(self, query='', limit=20, exclude_session='', scope='current', date_filter=True):
+    def search(self, query='', limit=20, exclude_session='', scope='current', date_filter=True,strict_evidence=False):
         if scope not in ('current', 'history'):
             raise ValueError('请选择当前有效回忆或历史记录。')
         limit = max(1, min(50, int(limit)))
@@ -300,6 +313,7 @@ class Journal:
         if not date_filter:date_range=None
         anchors=chunks(query)
         parts=query_parts(anchors)
+        normalized_query=lexical(query)
         validity = " AND e.valid_from<=? AND (e.valid_until IS NULL OR e.valid_until>?)" if scope == 'current' else ''
         clock_args = (self.now.isoformat(), self.now.isoformat()) if scope == 'current' else ()
         if date_range:
@@ -317,17 +331,18 @@ class Journal:
             ranked=[]
             for row in rows:
                 body=row['summary'] if row['corrected_at'] else row['summary']+'\n'+row['excerpt']
-                body_terms=set(tokens(body));alias_terms=set(tokens('\n'.join(json.loads(row['aliases']))))
+                aliases=json.loads(row['aliases']);body_terms=set(tokens(body));alias_terms=set(tokens('\n'.join(aliases)))
                 present=body_terms|alias_terms;matched=set(parts)&present
                 best=max((coverage(chunk,present) for chunk in anchors),default=0)
                 # A small shared fragment of a different subject is not a remembered event.
                 if best<.5 or not matched:continue
+                if strict_evidence and matched.issubset(WEAK_EVIDENCE) and not explicit_alias(normalized_query,aliases):continue
                 age = max(0, (self.now - instant(row['corrected_at'] or row['recorded_at'])).total_seconds() / 86400)
                 decay = 1 if row['pinned'] else .6+.4*math.pow(.5,age/(7 if row['kind']=='impression'else 60))
                 relevance=sum(1+math.log1p(len(term))for term in matched)*(1+best)
                 score=relevance*decay*(1.08 if row['pinned'] else 1)
                 item=dict(row)
-                item['match_kind']='alias' if matched.intersection(alias_terms-body_terms) else 'equivalent' if lexical(query)!=unicodedata.normalize('NFKC',query).casefold() else 'keywords'
+                item['match_kind']='alias' if matched.intersection(alias_terms-body_terms) else 'equivalent' if normalized_query!=unicodedata.normalize('NFKC',query).casefold() else 'keywords'
                 item['matched_terms']=sorted(matched,key=lambda term:(-len(term),term))[:6]
                 ranked.append((score,-row['raw_rank'],row['recorded_at'],item))
             rows=[r[-1]for r in sorted(ranked,key=lambda r:r[:3],reverse=True)]
@@ -348,7 +363,7 @@ class Journal:
         # An event's date ('昨天买的键盘') is not necessarily when it was discussed.
         try:date_filter=bool(re.search(r'聊|说|提|谈|讨论|对话|记录',query) or not chunks(dated_query(query,self.now)[0]))
         except ValueError:return ''
-        rows = self.search(query, limit=4, exclude_session=exclude_session,date_filter=date_filter)
+        rows = self.search(query, limit=4, exclude_session=exclude_session,date_filter=date_filter,strict_evidence=True)
         if not rows:
             return ''
         payload = [{'id': row['id'], 'revision': row['revision'], 'recorded_at': row['recorded_at'], 'source_ref': row['source_ref'], 'kind': row['kind'], 'valid_until': row['valid_until'], 'correction_source': row['correction_source'],

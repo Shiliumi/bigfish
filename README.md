@@ -155,6 +155,12 @@ swiftc desktop/PetBehavior.swift scripts/test_pet_behavior.swift -o /tmp/bigfish
 
 桌宠改编自 [PC2005-cloud/dsh-pet](https://github.com/PC2005-cloud/dsh-pet)，角色设计来自 [上善无形](https://space.bilibili.com/4456176) 与 [ZipZipPipe](https://space.bilibili.com/4168597)，遵循 CC BY-NC-SA 4.0 及上游的非商业条件。头像与表情来自 [可以叫我云大人 / 雾雪](https://kiriyuki.com)，保留作者说明。探头图片是基于该角色参考的 AI 辅助补绘，仍按角色素材条件处理。
 
+## 1.14.2：减少泛词带来的串题回忆
+
+自动召回不再只因“最后”“恢复”“密码”等泛词重合就把另一件事带入聊天；真实内容词和用户明确设置的完整别名继续有效。手动搜索仍可查这些记录，原始经历不修改。原有回放目标保持 78/79，先前转述负例的误取由 5/16 到 4/16；对象混淆与深层漏召回仍未全部解决。详见 [召回证据验证](docs/recall-evidence.md)。
+
+已有安装执行 `python3 scripts/install_memory.py`，空闲时重载 gateway 插件、重启内部接口；退出应用后构建新应用。不需要重设人设、模型或定时任务。
+
 ## 1.14.1：读取回忆少争一把写锁
 
 已初始化、索引一致的回忆库不再在每次查询时重跑建表与版本写入；旧库升级和过期索引修复仍在事务内执行，失败回滚。虚构并发检查中，另一个写事务未提交时仍能读取已提交内容；固定回放的召回文本保持一致。本轮不增加面板、工具或模型调用，也不改变 token 输入。详见 [持续改进记录与验证](docs/research-2026-10-29.md)。
