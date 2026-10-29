@@ -22,7 +22,7 @@ interface Message { id: string; role: 'user' | 'assistant'; text: string; error?
 interface Session { id: string; title: string; preview?: string; message_count: number; source?: string }
 interface Letter { id: string; text: string; source_url?: string; source_title: string; kind?: 'surf' | 'greeting' | 'balance' | 'study'; sent_at: string; read_at: string | null; session_id?: string; sticker_id?: string;thread_id?:string;thread_question?:string }
 interface Sticker { id: string; name: string; emotion: string; tags: string[]; use: string; source: string; author: string; image_url: string }
-interface Inbox { messages: Letter[]; unread: number; settings: { enabled: boolean; dailyLimit: number; minGapHours: number; quietStart: number; quietEnd: number; greetings: boolean; morning: string; night: string } }
+interface Inbox { messages: Letter[]; unread: number; can_interrupt:boolean; alert_ids:string[]; settings: { enabled: boolean; dailyLimit: number; minGapHours: number; quietStart: number; quietEnd: number; greetings: boolean; morning: string; night: string } }
 interface Document { content: string; version: string }
 const pages = [{ id: 'chat', label: '和鱼聊聊', icon: MessageCircle }, { id: 'explore', label: '探索日志', icon: Compass }, { id: 'memory', label: '记忆空间', icon: Brain }, { id: 'inbox', label: '鱼的来信', icon: Mail }, { id: 'stickers', label: '她的表情', icon: Smile }, { id: 'routines', label: '日常安排', icon: Clock3 }, { id: 'hermes', label: '鱼塘控制室', icon: Zap }] as const
 const dateLabel = (value?: string, timeOnly = false) => value ? new Date(value).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', ...(timeOnly ? {} : { month: '2-digit', day: '2-digit' }), hour: '2-digit', minute: '2-digit', hour12: false }) : '还没有安排'
@@ -77,7 +77,7 @@ export default function App() {
   async function refresh() {
     const [ov, recent, documents, letters, collection, interests] = await Promise.all([api<Overview>('/overview'), api<any>('/sessions'), api<Record<string, Document>>('/documents'), api<Inbox>('/inbox'), api<{items:Sticker[]}>('/stickers'), api<Curiosity>('/curiosity')])
     setStickers(collection.items); receiveCuriosity(interests)
-    setInbox(current => { if (inboxLoaded.current && current && letters.messages.some(m => !current.messages.some(old => old.id === m.id)) && !busyRef.current) notify('大肥鱼刚带回来一条发现，放在「鱼的来信」了。'); return letters }); inboxLoaded.current = true
+    setInbox(current => { if (inboxLoaded.current && current && letters.can_interrupt && letters.messages.some(m => letters.alert_ids.includes(m.id)&&!current.messages.some(old => old.id === m.id)) && !busyRef.current) notify('大肥鱼刚带回来一条发现，放在「鱼的来信」了。'); return letters }); inboxLoaded.current = true
     setOverview(ov); setSessions((Array.isArray(recent) ? recent : recent.sessions || []).filter((s: Session) => s.source === 'bigfish')); setDocs(documents)
   }
   const refreshRef = useRef(refresh); refreshRef.current = refresh
@@ -206,7 +206,7 @@ export default function App() {
     const showHermes = () => setPage('hermes'); window.addEventListener('fish:hermes', showHermes)
     const showSettings = () => setSettings(true); window.addEventListener('fish:settings', showSettings)
     if ((window as any).__FISH_PENDING_LETTER__) setPendingLetter((window as any).__FISH_PENDING_LETTER__)
-    let last = 0; const presence = () => { if (Date.now() - last > 60000) { last = Date.now(); void api('/presence', {method:'POST',body:'{}'}).catch(() => {}) } }
+    let last = 0,lastNative=0; const presence = () => { const now=Date.now(); if(now-lastNative>1000){lastNative=now;(window as any).webkit?.messageHandlers.fish.postMessage({type:'ui.presence'})} if (now - last > 60000) { last = now; void api('/presence', {method:'POST',body:'{}'}).catch(() => {}) } }
     window.addEventListener('pointerdown', presence); window.addEventListener('keydown', presence)
     return () => { window.removeEventListener('fish:open-letter', listener); window.removeEventListener('fish:inbox', showInbox); window.removeEventListener('fish:hermes', showHermes); window.removeEventListener('fish:settings', showSettings); window.removeEventListener('fish:chat', showChat); window.removeEventListener('fish:notification-status', permission); window.removeEventListener('pointerdown', presence); window.removeEventListener('keydown', presence) }
   }, [])

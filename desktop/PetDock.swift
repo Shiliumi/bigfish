@@ -55,14 +55,34 @@ enum PetDockGeometry {
 }
 
 /// Once-only notices. Historic unread mail does not repeatedly pull the pet out.
+struct PetInterruptionGate {
+    private var allowed = false, updated = Date.distantPast, activity = Date.distantPast
+    private var cooldown: TimeInterval = 600
+    mutating func update(allowed: Bool, minutes: Double? = nil, now: Date) {
+        self.allowed = allowed; updated = now
+        if let minutes = minutes, minutes.isFinite && minutes >= 0 && minutes <= 1440 { cooldown = minutes * 60 }
+    }
+    mutating func noteActivity(now: Date) { activity = now }
+    func allows(now: Date) -> Bool { allowed && now.timeIntervalSince(updated) >= 0 && now.timeIntervalSince(updated) < 10 && now.timeIntervalSince(activity) >= cooldown }
+}
+
 final class PetNoticeQueue {
     private var seen = Set<String>(), queued: [[String: Any]] = []
     var hasPending: Bool { !queued.isEmpty }
+    private func fresh(_ notice: [String: Any], now: Date) -> Bool {
+        let formatter = ISO8601DateFormatter(); formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        guard let stamp = notice["sent_at"] as? String, let sent = formatter.date(from: stamp), now.timeIntervalSince(sent) >= -60, now.timeIntervalSince(sent) < 15 * 60 else { return false }
+        if let expiry = notice["expires_at"] as? String { guard let end = formatter.date(from: expiry), now < end else { return false } }
+        return true
+    }
     func append(_ notice: [String: Any], now: Date) {
         guard let id = notice["id"] as? String, let text = notice["text"] as? String, !text.isEmpty, !seen.contains(id) else { return }
-        let formatter = ISO8601DateFormatter(); formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        guard let stamp = notice["sent_at"] as? String, let sent = formatter.date(from: stamp), now.timeIntervalSince(sent) >= -60, now.timeIntervalSince(sent) < 15 * 60 else { return }
+        guard fresh(notice, now: now) else { return }
         seen.insert(id); queued.append(notice)
     }
-    func take() -> [String: Any]? { queued.isEmpty ? nil : queued.removeFirst() }
+    func retain(ids: Set<String>) { queued.removeAll { !ids.contains($0["id"] as? String ?? "") } }
+    func take(now: Date = Date(), allowed: Bool = true) -> [String: Any]? {
+        queued.removeAll { !fresh($0, now: now) }
+        return allowed && !queued.isEmpty ? queued.removeFirst() : nil
+    }
 }

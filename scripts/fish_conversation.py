@@ -9,6 +9,7 @@ from urllib.parse import urlsplit
 MAX_CONTEXT=1800
 HINTS={
     'casual':'先接眼前这句话，短句也够；玩笑落在具体细节上，没笑点就正常说，不套固定台词。',
+    'playful':'这句可能在拿你逗趣，先联系当前对话的铺垫、读音和反差，再接眼前的画面；不急着按字面定义或追问发生了什么。短短回逗也够，不补解释、评价和总结。不确定梗意就留一点余地，不认定对方在设套，不编出处或说早就懂了；真在问知识或夸你时照常回应。',
     'focused':'先准确完成当前请求，按要求控制篇幅；只要一行或代码时不附教程。需要时保留必要说明，收起玩梗、撒娇和表达试行，不岔到自己的兴趣。',
     'gentle':'先回应对方正在表达的具体难受，别急着讲道理或派任务；收起玩笑和卖萌，认真听，不假装知道其处境。用户明确想听见闻时可聊一件有来源的事，否则不推自己的兴趣。',
     'feedback':'按当前原话和上文改口，别重复刚才的解释或声称早就懂了；对方收住就收住，不追猜。直接落实反馈，不辩解或播报人格；长期记住仍走原 memory 工具，不擅自改档案。',
@@ -36,6 +37,13 @@ def interest_invitation(query):
     return bool(re.search(r'最近.{0,12}(?:看|刷|冲浪|有趣|好玩)|还惦记|想看什么|想逛什么|上次那个|后来怎样|有什么新发现|接着上次|讲讲.{0,12}(?:发现|见闻)|你在看啥|想听你最近',user_words(query)))
 
 
+def playful_cue(text):
+    # A small cue for response timing, not a meme dictionary or an intent verdict.
+    if len(text.strip())>100:return False
+    if re.search(r'什么意思|什么含义|是什么意思|什么原理|出处|典故|翻译|拼音|读音|怎么(?:读|念)|为什么|如何',text):return False
+    return bool(re.search(r'(?:你|这条鱼).{0,18}(?:长得|圆滚滚|胖乎乎|肥嘟嘟|(?:胖|肥|圆){2}|能吃|饭桶|膨胀|看起来.{0,8}像|有种.{1,12}气质)|(?:^|[，,。！？!?])(?:你)?(?:看你|瞧你|看把你).{1,24}|(?:逗你|拿你开玩笑|给你起个外号)',text))
+
+
 def classify(query):
     text=user_words(query)
     if re.search(r'别老|不要每|少用|说话.{0,8}(?:太|别)|别.{0,8}(?:喊|叫|梗|撒娇)|别装可爱|不想听套话|太正经|像客服|别复读|别一句一个|别再.{0,8}(?:推|发)|不想再看|换个话题',text):return 'feedback'
@@ -45,8 +53,25 @@ def classify(query):
     if re.search(r'代码|报错|bug|排查|解释|证明|推导|怎么实现|帮我(?:写|改|查|做|算)|制定|计划|讲解|分析|诊断|作业|复习|怎么解',text,re.I):return 'focused'
     if re.search(r'你(?:刚才|刚|好像|还是|这次|又)?(?:没听懂|没懂|没接住|理解错了|会错意了)|我(?:说|问)的不是这个|不是这个意思|别猜了|不用猜了|不猜了|不讲了|先不聊这个|不用(?:再)?(?:举例|展开)了',text):return 'feedback'
     if interest_invitation(query):return 'interest'
+    if playful_cue(text):return 'playful'
     if re.search(r'白饭|傻鱼|笨鱼|爹|爸|咕|哈哈|好耶|无聊|摸鱼|抽象|可爱',text):return 'casual'
     return 'neutral'
+
+
+def turn_mode(query,journal,session_id,now=None):
+    mode=classify(query)
+    if mode not in ('casual','neutral')or not session_id:return mode
+    text=user_words(query).strip()
+    # Follow a short, recent setup only in this conversation. No inferred mood is saved.
+    if len(text)>70 or not re.search(r'^(?:那|所以|怪不得|原来|得[，,。]|叫你|就叫|你看|看你|还敢|再念|再读)|(?:念一遍|连起来|合起来|外号)',text):return mode
+    if re.search(r'什么意思|什么含义|出处|典故|翻译|拼音|读音|怎么(?:读|念)|为什么|如何',text):return mode
+    now=instant(now or datetime.now(timezone.utc))
+    rows=journal.db.execute("SELECT excerpt FROM episodes WHERE session_id=? AND status='active' AND corrected_at IS NULL AND julianday(recorded_at)>julianday(?) AND julianday(recorded_at)<=julianday(?) AND (valid_until IS NULL OR valid_until>?) ORDER BY julianday(recorded_at) DESC,rowid DESC LIMIT 2",(session_id,(now-timedelta(minutes=30)).isoformat(),now.isoformat(),now.isoformat())).fetchall()
+    for row in rows:
+        prior=row['excerpt'].removeprefix('你：').partition('\n大肥鱼：')[0]
+        if classify(prior) in ('focused','gentle','feedback','interest'):break
+        if playful_cue(user_words(prior)):return 'playful'
+    return mode
 
 
 def public_url(value):
@@ -162,11 +187,13 @@ def recent_voice(journal,session_id,now=None):
 
 
 def context(root,query,*,journal,session_id='',tokenize=None,now=None,include_interest=True,sanitize=None):
-    mode=classify(query);packet={'mode':mode,'hint':HINTS[mode]}
+    try:mode=turn_mode(query,journal,session_id,now)
+    except (ValueError,TypeError,OSError):mode=classify(query)
+    packet={'mode':mode,'hint':HINTS[mode]}
     try:voice=recent_voice(journal,session_id,now)
     except Exception:voice=[]
     if voice:packet['recent_rhythm']=voice
-    if include_interest and (mode not in ('focused','gentle','feedback')or mode!='feedback'and interest_invitation(query)):
+    if include_interest and (mode not in ('focused','gentle','feedback','playful')or mode not in ('feedback','playful')and interest_invitation(query)):
         material=interest_material(root,query,now=now,tokenize=tokenize,allow_unrelated=mode!='focused')
         if material:
             packet['interest']=material

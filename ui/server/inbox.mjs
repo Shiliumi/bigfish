@@ -1,13 +1,14 @@
 import { readFile, writeFile, mkdir, rename, readdir, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { SOCIAL_DEFAULTS, deliveryDecision, greetingCandidates } from './social.mjs';
+import { SOCIAL_DEFAULTS, deliveryDecision, greetingCandidates, interruptionAllowed, freshNotice } from './social.mjs';
 import {readInterestControls,interestBlocked} from './interest-controls.mjs';
 export { SOCIAL_DEFAULTS, deliveryDecision } from './social.mjs';
 
-export function createInbox(root, clock = Date.now) {
+export function createInbox(root, clock = Date.now, {isBusy=()=>false} = {}) {
   const directory=path.join(root,'data'), store=path.join(directory,'inbox.json'), spool=path.join(directory,'outbox');
   let serial=Promise.resolve(), lastActivity=0;
+  const busy=()=>{try{return Boolean(isBusy());}catch{return true;}};
   const exclusive=action=>{const operation=serial.then(action);serial=operation.catch(()=>{});return operation;};
   const read=async()=>{
     let data;try{data=JSON.parse(await readFile(store,'utf8'));}catch(error){if(error.code!=='ENOENT')throw error;data={messages:[],processed:[]};}
@@ -47,7 +48,11 @@ export function createInbox(root, clock = Date.now) {
   return {
     activity(){lastActivity=clock();},
     updateInterest:action=>exclusive(action),
-    snapshot:()=>exclusive(async()=>{const data=await read();return {settings:data.settings,messages:data.messages,unread:data.messages.filter(m=>!m.read_at).length};}),
+    snapshot:()=>exclusive(async()=>{
+      const data=await read(),now=clock(),controls=await readInterestControls(root).catch(()=>({unavailable:true,items:[]}));
+      const alert_ids=data.messages.filter(m=>!m.notified_at&&!m.pet_notified_at&&freshNotice(m,data.settings,now)&&((m.kind||'surf')!=='surf'||!controls.unavailable&&!interestBlocked(controls,m.interest_id||m.thread_id,m.source_url,now))).map(m=>m.id);
+      return {settings:data.settings,messages:data.messages,unread:data.messages.filter(m=>!m.read_at).length,can_interrupt:interruptionAllowed(data.settings,now,lastActivity,busy()),alert_ids};
+    }),
     settings:(enabled,greetings)=>exclusive(async()=>{if(typeof enabled!=='boolean')throw Error('请选择是否开启主动招呼。');const data=await read();data.settings.enabled=enabled;if(typeof greetings==='boolean')data.settings.greetings=greetings;await save(data);return data.settings;}),
     update:(id,updates)=>exclusive(async()=>{const data=await read(),message=data.messages.find(m=>m.id===id);if(!message)return null;if(updates.read)message.read_at=new Date(clock()).toISOString();if(updates.notified)message.notified_at=new Date(clock()).toISOString();if(updates.pet_notified)message.pet_notified_at=new Date(clock()).toISOString();if(updates.session_id&&typeof updates.session_id==='string'&&updates.session_id.length<200)message.session_id=updates.session_id;await save(data);return message;}),
     // Local routines use this directly; no unauthenticated publishing endpoint exists.
@@ -59,7 +64,7 @@ export function createInbox(root, clock = Date.now) {
       const deliver=(candidate,key)=>{
         if((candidate.kind||'surf')==='surf'&&controls.unavailable)return false;
         // Recheck queued messages at delivery time: an outing may predate the user's choice.
-        const decision=(candidate.kind||'surf')==='surf'&&interestBlocked(controls,candidate.interest_id||candidate.thread_id,candidate.source_url,now)?'interest_stopped':deliveryDecision(candidate,data.messages,data.settings,now,lastActivity);
+        const decision=(candidate.kind||'surf')==='surf'&&interestBlocked(controls,candidate.interest_id||candidate.thread_id,candidate.source_url,now)?'interest_stopped':deliveryDecision(candidate,data.messages,data.settings,now,lastActivity,busy());
         if(decision==='wait')return false;
         if(key)data.processed.push(key);
         if(decision==='send')data.messages.push({...candidate,id:randomUUID(),sent_at:new Date(now).toISOString(),read_at:null,notified_at:null,pet_notified_at:null});

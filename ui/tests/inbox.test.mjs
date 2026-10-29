@@ -19,6 +19,26 @@ test('quiet hours, cooldown, daily cap, recent conversation and duplicates preve
   assert.equal(decide([9, 14].map(hour => ({ source_url: 'other' + hour, sent_at: `2026-10-27T${String(hour).padStart(2, '0')}:00:00+08:00` })), SOCIAL_DEFAULTS, later), 'wait');
   assert.equal(decide([], SOCIAL_DEFAULTS, noon + 25 * 3600000), 'expired');
 });
+test('a long running reply still defers delivery, then completion starts a full activity cooldown',async t=>{
+ const root=await mkdtemp(path.join(os.tmpdir(),'fish-long-reply-'));t.after(()=>rm(root,{recursive:true,force:true}));
+ let now=noon,busy=true;const inbox=createInbox(root,()=>now,{isBusy:()=>busy});inbox.activity();
+ await inbox.queueLocal({kind:'balance',text:'虚构余额提醒，只供本机测试。',dedupe_key:'fixture-balance'});
+ now+=30*60000;await inbox.tick();assert.equal((await inbox.snapshot()).messages.length,0);assert.equal((await inbox.snapshot()).can_interrupt,false);
+ busy=false;inbox.activity();now+=9*60000;await inbox.tick();assert.equal((await inbox.snapshot()).messages.length,0);
+ now+=60000;await inbox.tick();const snapshot=await inbox.snapshot();assert.equal(snapshot.messages.length,1);assert.equal(snapshot.can_interrupt,true);assert.deepEqual(snapshot.alert_ids,[snapshot.messages[0].id]);
+});
+test('old, read, expired and already alerted messages stay in the inbox without another automatic alert',async t=>{
+ const root=await mkdtemp(path.join(os.tmpdir(),'fish-alert-age-'));t.after(()=>rm(root,{recursive:true,force:true}));await mkdir(path.join(root,'data'));
+ const base={kind:'study',text:'虚构学习搭子的消息。',read_at:null,notified_at:null,pet_notified_at:null,sent_at:new Date(noon-60000).toISOString()};
+ const messages=[{...base,id:'fresh'},{...base,id:'old',sent_at:new Date(noon-16*60000).toISOString()},{...base,id:'read',read_at:new Date(noon).toISOString()},{...base,id:'notified',notified_at:new Date(noon).toISOString()},{...base,id:'pet',pet_notified_at:new Date(noon).toISOString()},{...base,id:'expired',expires_at:new Date(noon-1).toISOString()}];
+ await writeFile(path.join(root,'data/inbox.json'),JSON.stringify({messages,processed:[]}));let busy=false;
+ const inbox=createInbox(root,()=>noon,{isBusy:()=>busy});let result=await inbox.snapshot();assert.deepEqual(result.alert_ids,['fresh']);assert.equal(result.messages.length,6);
+ busy=true;result=await inbox.snapshot();assert.equal(result.can_interrupt,false);assert.deepEqual(result.alert_ids,['fresh']);
+});
+test('an unavailable busy signal cannot allow a proactive message',async t=>{
+ const root=await mkdtemp(path.join(os.tmpdir(),'fish-busy-unavailable-'));t.after(()=>rm(root,{recursive:true,force:true}));
+ const inbox=createInbox(root,()=>noon,{isBusy(){throw Error('fixture offline')}});await inbox.queueLocal({kind:'balance',text:'虚构测试提醒。',dedupe_key:'fixture'});await inbox.tick();assert.equal((await inbox.snapshot()).messages.length,0);
+});
 test('verified discoveries persist once; unverified links and low-value candidates never become messages', async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'bigfish-inbox-'));
   try {

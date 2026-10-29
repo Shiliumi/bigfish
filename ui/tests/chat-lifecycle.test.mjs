@@ -46,3 +46,7 @@ test('failed cleanup retains ownership so the next attempt can recover', async (
   pool.sessions.get('retry').rpc = async () => ({ closed: true }); await pool.release(viewer);
   assert.equal(pool.sessions.size, 0);
 });
+test('only disconnecting the last viewer ends the busy signal',()=>{
+ const pool=new ChatSessions(),one=peer(),two=peer();pool.attach(one,{session_id:'shared'});pool.attach(two,{session_id:'shared'});pool.begin(one);
+ assert.equal(pool.detach(one),false);assert.equal(pool.snapshot().length,1);assert.equal(pool.detach(two),true);assert.equal(pool.snapshot().length,0);assert.equal(pool.detach(two),false);
+});

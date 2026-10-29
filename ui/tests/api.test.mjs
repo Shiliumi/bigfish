@@ -26,7 +26,7 @@ test('daily allowance is private, revision-safe and records no request contents'
 });
 test('companion publishes only public runtime state',async()=>{
   const response=await fetch(BASE+'/api/companion',{headers});assert.equal(response.status,200);
-  const state=await response.json(); assert.deepEqual(Object.keys(state).sort(),['animation','balance','label','notice','state','unread']);
+  const state=await response.json(); assert.deepEqual(Object.keys(state).sort(),['activity_minutes','alert_ids','animation','balance','can_interrupt','label','notice','state','unread']);
   assert.ok(['idle','thinking','working','greeting'].includes(state.animation));
   assert.ok(!JSON.stringify(state).includes('api_key'));
 });

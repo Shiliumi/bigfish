@@ -150,6 +150,8 @@ final class FloatingPet: NSObject {
     let behavior = PetBehavior(), popover = NSPopover(), chat = PetChat(), label = NSTextField(labelWithString: "")
     var timer: Timer?
     var open: (() -> Void)?, inbox: (() -> Void)?, visibilityChanged: (() -> Void)?, send: ((String) -> Void)?
+    var canInterrupt: (() -> Bool) = { false }
+    var activity: (() -> Void)?
     private var hovering = false
     let greeting = PetGreeting(), notices = PetNoticeQueue()
     var noticeShown: ((String) -> Void)?, openLetter: ((String) -> Void)?
@@ -170,13 +172,13 @@ final class FloatingPet: NSObject {
         label.alignment = .center; label.font = .systemFont(ofSize: 10, weight: .medium); label.textColor = NSColor(calibratedRed: 0.32, green: 0.43, blue: 0.59, alpha: 1); label.drawsBackground = true; label.backgroundColor = NSColor.white.withAlphaComponent(0.92); label.wantsLayer = true; label.layer?.cornerRadius = 11; label.layer?.masksToBounds = true; root.addSubview(label)
         popover.contentViewController = chat; popover.behavior = .transient; popover.animates = false; popover.contentSize = NSSize(width: 330, height: 338)
         chat.submit = { [weak self] text in self?.send?(text) }
-        chat.close = { [weak self] in self?.popover.performClose(nil) }
+        chat.close = { [weak self] in self?.activity?(); self?.popover.performClose(nil) }
         chat.openFish = { [weak self] in self?.popover.performClose(nil); self?.open?() }
         chat.openInbox = { [weak self] in self?.popover.performClose(nil); self?.inbox?() }
         greeting.open = { [weak self] in self?.openGreeting() }; greeting.dismiss = { [weak self] in self?.returnAt = Date().addingTimeInterval(2) }
         sprite.tapped = { [weak self] head, focus in guard let self = self else { return }; self.expandFromDock(); let pose = self.behavior.tap(head: head, now: Date().timeIntervalSince1970); self.tick(); self.presentChat(pose.caption, focus: focus) }
-        sprite.dragBegan = { [weak self] in guard let self = self else { return }; self.popover.performClose(nil); self.greeting.hide(); self.expandFromDock(); self.dock = nil; self.saveDock(); self.behavior.beginDrag(); self.tick() }
-        sprite.dragEnded = { [weak self] in self?.behavior.endDrag(now: Date().timeIntervalSince1970); self?.settleAfterDrag(); self?.tick() }
+        sprite.dragBegan = { [weak self] in guard let self = self else { return }; self.activity?(); self.popover.performClose(nil); self.greeting.hide(); self.expandFromDock(); self.dock = nil; self.saveDock(); self.behavior.beginDrag(); self.tick() }
+        sprite.dragEnded = { [weak self] in self?.activity?(); self?.behavior.endDrag(now: Date().timeIntervalSince1970); self?.settleAfterDrag(); self?.tick() }
         sprite.menuBuilder = { [weak self] in self?.menu() ?? NSMenu() }
         sprite.hoverChanged = { [weak self] value in self?.hovering = value; self?.tick() }
         setSize(sizeName, persist: false)
@@ -189,10 +191,12 @@ final class FloatingPet: NSObject {
     }
     func update(_ snapshot: [String: Any]) {
         behavior.update(state: snapshot["state"] as? String ?? "offline", caption: snapshot["label"] as? String ?? "鱼塘暂时离线", unread: snapshot["unread"] as? Int ?? 0, now: Date().timeIntervalSince1970)
+        if let ids = snapshot["alert_ids"] as? [String] { notices.retain(ids: Set(ids)) }
         if let notice = snapshot["notice"] as? [String: Any] { notices.append(notice, now: Date()) }; tick()
     }
     func receiveChat(status: String, text: String) { chat.receive(status: status, message: text); if status == "complete" { behavior.perform("happy", caption: "回爹的话，收到。", now: Date().timeIntervalSince1970) }; tick() }
     func presentChat(_ message: String? = nil, focus: Bool = true) {
+        activity?()
         if !visible { show() }; expandFromDock(); greeting.hide(); chat.loadViewIfNeeded()
         if let message = message, !chat.waiting { chat.text.string = message; chat.status.stringValue = "摸摸她，也可以直接聊两句" }
         popover.show(relativeTo: NSRect(x: 12, y: 20, width: sprite.bounds.width - 24, height: sprite.bounds.height - 30), of: sprite, preferredEdge: .minX)
@@ -200,7 +204,8 @@ final class FloatingPet: NSObject {
     }
     func tick() {
         guard visible else { return }
-        if !behavior.dragging && !chat.waiting && !popover.isShown && !greeting.visible, let notice = notices.take() { presentGreeting(notice) }
+        if !canInterrupt() && greeting.visible && activeNotice?["id"] != nil { greeting.hide(); activeNotice = nil; returnAt = Date().addingTimeInterval(2) }
+        if !behavior.dragging && !chat.waiting && !popover.isShown && !greeting.visible, let notice = notices.take(now: Date(), allowed: canInterrupt()) { presentGreeting(notice) }
         if greeting.visible && Date() > greetingUntil && !greeting.hovered { greeting.hide(); returnAt = Date().addingTimeInterval(2) }
         if dock != nil && !peeked && Date() > returnAt && !hovering && !greeting.visible && !popover.isShown && !chat.waiting && !behavior.dragging { applyPeek() }
         var calendar = Calendar(identifier: .gregorian); calendar.timeZone = TimeZone(identifier: "Asia/Shanghai")!

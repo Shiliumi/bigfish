@@ -17,7 +17,7 @@ export class ChatSessions {
     if (!state || state.closing) throw rpcError('会话已暂存，请重新连接这段对话。');
     state.busy = true; state.activity = 'thinking'; state.used = this.now();
   }
-  complete(id) { const state = this.sessions.get(id); if (state) { state.busy = false; state.used = this.now(); } }
+  complete(id) { const state = this.sessions.get(id); if (!state) return false; const wasBusy=state.busy; state.busy = false; state.used = this.now(); return wasBusy; }
   activity(event) {
     const state = this.sessions.get(event?.session_id);
     if (!state?.busy) return;
@@ -50,8 +50,10 @@ export class ChatSessions {
   }
   detach(peer) {
     const state = this.sessions.get(peer.session);
+    const ended=Boolean(state?.busy&&state.peers.size===1&&state.peers.has(peer));
     if (state) { state.peers.delete(peer); if (state.peers.size) state.rpc = [...state.peers][0].rpc; else this.sessions.delete(state.id); }
     peer.session = '';
+    return ended;
   }
   async reclaim(except = '', expiredOnly = false) {
     const candidates = [...this.sessions.values()].filter(state => state.id !== except && !state.busy && !state.closing && (!expiredOnly || this.now() - state.used >= this.idleMs)).sort((a, b) => a.used - b.used);
@@ -68,9 +70,12 @@ const reap = setInterval(() => sessions.reclaim('', true).catch(() => {}), 30000
 const capacity = error => /active session limit|MAX_CONCURRENT_SESSIONS/.test(error.message || '');
 const allowed = new Set(['client.capabilities', 'session.create', 'session.resume', 'session.list', 'session.title', 'session.interrupt', 'session.close', 'session.release', 'prompt.submit', 'approval.respond', 'approval.received', 'approval.pending', 'request.answer', 'gateway.ping']);
 
-export function attachChatClient(client, { nativeUrl, root, onPrompt, onBalanceFailure = () => {} }) {
+export function attachChatClient(client, { nativeUrl, root, onPrompt, onIdle = () => {}, onBalanceFailure = () => {} }) {
   const upstream = new WebSocket(nativeUrl, { origin: 'http://127.0.0.1:9119' });
   const pending = new Map(); let sequence = 0, work = Promise.resolve(), gone = false, mounting = false;
+  const noteIdle=()=>{try{onIdle();}catch{}};
+  const completed=id=>{if(sessions.complete(id))noteIdle();};
+  const detached=()=>{if(sessions.detach(peer))noteIdle();};
   let buffered = [];
   const ready = new Promise((resolve, reject) => { upstream.once('open', resolve); upstream.once('error', reject); upstream.once('close', () => reject(new Error('Hermes 连接已断开。'))); });
   ready.catch(() => {});
@@ -106,7 +111,7 @@ export function attachChatClient(client, { nativeUrl, root, onPrompt, onBalanceF
       } else {
         if(insufficientBalance(frame.params?.payload?.error||frame.params?.payload?.message))onBalanceFailure();
         sessions.activity(frame.params);
-        if (frame.params?.type === 'message.complete') sessions.complete(frame.params.session_id);
+        if (frame.params?.type === 'message.complete') completed(frame.params.session_id);
         if (mounting && frame.method && frame.params?.session_id) buffered.push(frame);
         else forward(frame);
       }
@@ -135,9 +140,9 @@ export function attachChatClient(client, { nativeUrl, root, onPrompt, onBalanceF
         let result;
         try { result = await peer.rpc(method, params); }
         catch (error) {
-          if (method === 'prompt.submit') sessions.complete(peer.session);
+          if (method === 'prompt.submit') completed(peer.session);
           // This typed admission refusal happens before a turn is accepted. Never retry an uncertain/network failure.
-          if (method === 'prompt.submit' && capacity(error) && await sessions.reclaim(peer.session)) { sessions.begin(peer); try { result = await peer.rpc(method, params); } catch (retryError) { sessions.complete(peer.session); throw retryError; } }
+          if (method === 'prompt.submit' && capacity(error) && await sessions.reclaim(peer.session)) { sessions.begin(peer); try { result = await peer.rpc(method, params); } catch (retryError) { completed(peer.session); throw retryError; } }
           else throw error;
         }
         peer.emit({ jsonrpc: '2.0', id, result });
@@ -147,7 +152,7 @@ export function attachChatClient(client, { nativeUrl, root, onPrompt, onBalanceF
   });
   upstream.on('close', () => {
     for (const request of pending.values()) { clearTimeout(request.timer); request.reject(new Error('Hermes 连接已断开。')); }
-    pending.clear(); sessions.detach(peer);
+    pending.clear(); detached();
     if (client.readyState === WebSocket.OPEN) client.close(1012, '连接已更新，请重新连接。');
   });
   upstream.on('error', () => { if (client.readyState === WebSocket.OPEN) client.close(1011, 'Hermes 连接暂时不可用。'); });
@@ -155,7 +160,7 @@ export function attachChatClient(client, { nativeUrl, root, onPrompt, onBalanceF
     if (gone) return; gone = true;
     // Give a refreshing/reconnecting client time to attach. Native close_on_disconnect then releases only the last viewer.
     const grace = sessions.sessions.get(peer.session)?.busy ? 5000 : 0;
-    setTimeout(() => { sessions.detach(peer); upstream.close(); }, grace).unref();
+    setTimeout(() => { detached(); upstream.close(); }, grace).unref();
   };
   client.on('close', disconnect); client.on('error', disconnect);
 }

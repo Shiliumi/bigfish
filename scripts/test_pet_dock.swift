@@ -19,9 +19,19 @@ import CoreGraphics
         assert(PetDockGeometry.frame(leftDock,width:220,screens:[right,left],expanded:false)!.minX == -1920)
         let now=Date(timeIntervalSince1970:100000),formatter=ISO8601DateFormatter();formatter.formatOptions=[.withInternetDateTime,.withFractionalSeconds]
         let queue=PetNoticeQueue(),notice:[String:Any]=["id":"one","text":"爹，我来冒个泡。","sent_at":formatter.string(from:now)]
-        queue.append(notice,now:now);queue.append(notice,now:now);assert(queue.take()?["id"] as? String=="one");assert(queue.take()==nil)
+        queue.append(notice,now:now);queue.append(notice,now:now);assert(queue.take(now:now)?["id"] as? String=="one");assert(queue.take(now:now)==nil)
         queue.append(notice,now:now);assert(!queue.hasPending)
         queue.append(["id":"old","text":"old","sent_at":formatter.string(from:now.addingTimeInterval(-3600))],now:now);assert(!queue.hasPending)
+        let delayed=PetNoticeQueue();delayed.append(["id":"delayed","text":"queued discovery","sent_at":formatter.string(from:now)],now:now)
+        assert(delayed.take(now:now.addingTimeInterval(30),allowed:false)==nil);assert(delayed.hasPending)
+        assert(delayed.take(now:now.addingTimeInterval(901),allowed:true)==nil);assert(!delayed.hasPending)
+        let cancelled=PetNoticeQueue();cancelled.append(["id":"read","text":"already read","sent_at":formatter.string(from:now)],now:now);cancelled.retain(ids:[]);assert(cancelled.take(now:now)==nil)
+        let expiry=PetNoticeQueue();expiry.append(["id":"window","text":"greeting","sent_at":formatter.string(from:now),"expires_at":formatter.string(from:now.addingTimeInterval(10))],now:now);assert(expiry.take(now:now.addingTimeInterval(11))==nil)
+        var interruptions=PetInterruptionGate();assert(!interruptions.allows(now:now));interruptions.update(allowed:true,now:now);assert(interruptions.allows(now:now));assert(!interruptions.allows(now:now.addingTimeInterval(10)))
+        interruptions.noteActivity(now:now);interruptions.update(allowed:true,now:now.addingTimeInterval(599));assert(!interruptions.allows(now:now.addingTimeInterval(599)))
+        interruptions.update(allowed:true,now:now.addingTimeInterval(600));assert(interruptions.allows(now:now.addingTimeInterval(600)))
+        interruptions.update(allowed:false,now:now.addingTimeInterval(600));assert(!interruptions.allows(now:now.addingTimeInterval(600)))
+        interruptions.update(allowed:true,minutes:1,now:now.addingTimeInterval(60));assert(interruptions.allows(now:now.addingTimeInterval(60)))
         print("Pet docking: body bounds, shared seams, negative-coordinate screens, safe expansion and once-only notice queue passed")
     }
 }

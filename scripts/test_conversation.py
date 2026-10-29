@@ -92,6 +92,37 @@ class ConversationTest(unittest.TestCase):
     def test_plain_casual_turns_reuse_static_guide_without_an_empty_dynamic_packet(self):
         self.assertEqual(self.packet('爹今天喝水了吗？'),'');self.assertEqual(self.packet('今天想喝热水。'),'')
         self.assertIn('focused',self.packet('帮我排查代码报错。'))
+    def test_teasing_gets_a_bounded_hint_without_a_fixed_answer_or_interest_pitch(self):
+        self.thread()
+        for query in ['你今天有种微波炉土豆的气质。','看把你得意的，都快飞起来了。','你是不是有点膨胀了。','你看你圆圆的，都快滚走了。']:
+            with self.subTest(query=query):
+                packet=self.packet(query);self.assertIn('"mode":"playful"',packet)
+                self.assertIn('可能',packet);self.assertNotIn('"interest":',packet)
+                self.assertNotIn(query,packet);self.assertLess(len(packet),500)
+    def test_a_short_setup_is_local_recent_and_does_not_override_a_serious_turn(self):
+        with Journal(self.root,now=self.now)as store:
+            store.capture('chat','你今天有种微波炉土豆的气质。','烫嘴是吧。',recorded_at=(self.now-timedelta(minutes=2)).isoformat())
+            self.assertEqual(talk.turn_mode('那就叫你薯熟吧。',store,'chat',self.now),'playful')
+            self.assertEqual(talk.turn_mode('那就叫你薯熟吧。',store,'another',self.now),'neutral')
+            self.assertEqual(talk.turn_mode('那就叫你薯熟吧。',store,'chat',self.now+timedelta(hours=1)),'neutral')
+            self.assertEqual(talk.turn_mode('那帮我解释这段代码。',store,'chat',self.now),'focused')
+            self.assertEqual(talk.turn_mode('那我很累，别闹了。',store,'chat',self.now),'gentle')
+            self.assertEqual(talk.turn_mode('那你没懂，不用猜了。',store,'chat',self.now),'feedback')
+            store.capture('chat','帮我排查代码。','先看日志。',recorded_at=(self.now-timedelta(minutes=1)).isoformat())
+            self.assertEqual(talk.turn_mode('那就继续吧。',store,'chat',self.now),'neutral')
+    def test_literal_questions_quotes_and_kindness_are_not_teasing_verdicts(self):
+        for query in ['你长得像什么是什么意思？','你今天有种土豆气质这句梗的出处？','你这次帮上忙了，真的谢谢。','他说“看把你得意的”，这句放在结尾。','```text\n你今天有种土豆气质\n```\n这是材料。']:
+            with self.subTest(query=query):self.assertNotEqual(talk.classify(query),'playful')
+        self.assertEqual(talk.classify('看你这么开心，帮我写段代码。'),'focused')
+        self.assertEqual(talk.classify('看你这么开心，我却很难受。'),'gentle')
+    def test_forgotten_corrected_expired_and_future_setups_do_not_steer_the_turn(self):
+        with Journal(self.root,now=self.now)as store:
+            row=store.capture('chat','你今天有种微波炉土豆的气质。','烫嘴是吧。',recorded_at=(self.now-timedelta(minutes=2)).isoformat())
+            for changes in ["status='forgotten'", "corrected_at='2026-10-28T03:59:00+00:00'", "valid_until='2026-10-28T03:59:00+00:00'", "recorded_at='2026-10-28T04:01:00+00:00'"]:
+                with self.subTest(changes=changes):
+                    store.db.execute("UPDATE episodes SET "+changes+" WHERE id=?",(row['id'],))
+                    self.assertEqual(talk.turn_mode('那就叫你薯熟吧。',store,'chat',self.now),'neutral')
+                    store.db.execute("UPDATE episodes SET status='active', corrected_at=NULL, valid_until=NULL, recorded_at=? WHERE id=?",((self.now-timedelta(minutes=2)).isoformat(),row['id']))
     def test_misunderstanding_and_release_use_feedback_without_overriding_a_real_task(self):
         for query in ['你刚才没接住，我在逗你。','你还是没懂，我说的不是这个。','不是这个意思，不用猜了。','不讲了，先到这。','先不聊这个。','够了，不用举例了。']:
             with self.subTest(query=query):self.assertEqual(talk.classify(query),'feedback')

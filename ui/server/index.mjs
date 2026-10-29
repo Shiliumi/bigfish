@@ -36,10 +36,10 @@ async function companion() {
   }
   const letters = await inbox.snapshot(), curiosity = await curiositySnapshot(ROOT).catch(()=>({last_outing:null}));
   const outingStarted = curiosity.last_outing?.status==='started' && Date.now()-Date.parse(curiosity.last_outing.started_at)<15*60000;
-  const notice = letters.messages.find(m=>!m.read_at&&!m.pet_notified_at&&Date.now()-Date.parse(m.sent_at)<15*60000);
-  return {...companionState({ ...companionCache, activities: chatActivity(), unread: letters.unread, outingStarted }),notice:notice?{id:notice.id,text:notice.text,kind:notice.kind||'surf',sent_at:notice.sent_at,source_url:notice.source_url,source_title:notice.source_title}:null,balance:balance.snapshot()};
+  const notice = letters.can_interrupt?letters.messages.find(m=>letters.alert_ids.includes(m.id)&&!m.pet_notified_at&&!m.notified_at):null;
+  return {...companionState({ ...companionCache, activities: chatActivity(), unread: letters.unread, outingStarted }),can_interrupt:letters.can_interrupt,activity_minutes:letters.settings.activityMinutes,alert_ids:letters.alert_ids,notice:notice?{id:notice.id,text:notice.text,kind:notice.kind||'surf',sent_at:notice.sent_at,expires_at:notice.expires_at,source_url:notice.source_url,source_title:notice.source_title}:null,balance:balance.snapshot()};
 }
-const inbox = createInbox(ROOT);
+const inbox = createInbox(ROOT,Date.now,{isBusy:()=>chatActivity().length>0});
 const models = createModelSettings(ROOT,{native,isBusy:()=>chatActivity().length>0});
 const balance = createBalance(ROOT,{connection:()=>models.balanceConnection(),onState:async state=>{const notice=balanceNotice(state,Date.now());if(notice)await inbox.queueLocal(notice);else if(['ready','unsupported'].includes(state.status))await inbox.cancelPending('balance');}});
 const balanceTimer=setInterval(()=>balance.refresh().catch(()=>{}),15*60000);balanceTimer.unref();void balance.refresh().catch(()=>{});
@@ -221,7 +221,7 @@ server.on('upgrade',async(req,socket,head)=>{
   if(ticket) chatTickets.delete(ticket);
   try{authorize(req,valid);await getToken();}catch(error){console.warn('Chat connection refused:',error.status||503);socket.destroy();return;}
   wss.handleUpgrade(req,socket,head,client=>{
-    attachChatClient(client,{nativeUrl:`ws://127.0.0.1:9119/api/ws?token=${encodeURIComponent(nativeToken)}`,root:ROOT,onPrompt:()=>inbox.activity(),onBalanceFailure:()=>models.balanceConnection().then(c=>c&&balance.noteFailure()).catch(()=>{})});
+    attachChatClient(client,{nativeUrl:`ws://127.0.0.1:9119/api/ws?token=${encodeURIComponent(nativeToken)}`,root:ROOT,onPrompt:()=>inbox.activity(),onIdle:()=>inbox.activity(),onBalanceFailure:()=>models.balanceConnection().then(c=>c&&balance.noteFailure()).catch(()=>{})});
   });
 });
 if(process.argv.includes('--dev')) {

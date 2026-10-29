@@ -18,8 +18,8 @@ test('switching windows releases only unused chats and routes events to the curr
     if (frame.method === 'session.resume') socket.send(reply + '\n' + JSON.stringify({jsonrpc:'2.0',method:'event',params:{type:'message.delta',session_id:result.session_id,payload:{text:'resume-buffered-delta'}}}));
     else socket.send(reply);
   }));
-  const server = http.createServer(), bridge = new WebSocketServer({ server });
-  bridge.on('connection', client => attachChatClient(client, { nativeUrl: `ws://127.0.0.1:${native.address().port}`, root: '/test-fixture', onPrompt() {} }));
+  const server = http.createServer(), bridge = new WebSocketServer({ server });let prompts=0,idle=0;
+  bridge.on('connection', client => attachChatClient(client, { nativeUrl: `ws://127.0.0.1:${native.address().port}`, root: '/test-fixture', onPrompt() {prompts++;},onIdle(){idle++;} }));
   server.listen(0, '127.0.0.1'); await once(server, 'listening');
   const viewers = [];
   function viewer() {
@@ -40,7 +40,10 @@ test('switching windows releases only unused chats and routes events to the curr
     await a.rpc('gateway.ping'); await b.rpc('gateway.ping');
     assert.ok(!a.events.some(f => f.params?.type === 'message.delta'));
     assert.ok(b.events.some(f => f.params?.type === 'message.delta'));
-    await b.rpc('session.release'); assert.ok(closed.includes(shared.session_id)); await a.rpc('session.release');
+    await b.rpc('session.release'); assert.ok(closed.includes(shared.session_id));
+    await a.rpc('prompt.submit',{session_id:other.session_id,text:'fictional question'});assert.equal(prompts,1);assert.equal(idle,0);
+    for(let i=0;i<2;i++){for(const socket of native.clients)socket.send(JSON.stringify({jsonrpc:'2.0',method:'event',params:{type:'message.complete',session_id:other.session_id,payload:{}}}));await a.rpc('gateway.ping');}
+    assert.equal(idle,1,'the completed reply refreshes activity once, including with multiple peers');await a.rpc('session.release');
     assert.ok(requests.filter(r => ['session.create', 'session.resume'].includes(r.method)).every(r => r.params.close_on_disconnect === true));
   } finally {
     for (const socket of viewers) socket.close();

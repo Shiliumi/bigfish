@@ -21,6 +21,7 @@ final class FishDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKN
     var root: String { Bundle.main.object(forInfoDictionaryKey: "FishProjectRoot") as! String }
     var notifying = Set<String>()
     var petNotifying = Set<String>()
+    var interruptions = PetInterruptionGate(), lastPresenceSent = Date.distantPast
 
     func applicationWillFinishLaunching(_ notification: Notification) {
         UNUserNotificationCenter.current().delegate = self
@@ -40,6 +41,8 @@ final class FishDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKN
         pet.visibilityChanged = { [weak self] in self?.publishPetStatus() }
         pet.openLetter = { [weak self] id in self?.showWindow(letter: id) }
         pet.noticeShown = { [weak self] id in self?.acknowledgePet(id) }
+        pet.canInterrupt = { [weak self] in self?.interruptions.allows(now: Date()) ?? false }
+        pet.activity = { [weak self] in self?.recordActivity() }
         pet.send = { [weak self] text in self?.sendPet(text) }
         petTimer = Timer.scheduledTimer(withTimeInterval: 3, repeats: true) { [weak self] _ in self?.pollPet() }
         web.loadHTMLString("<html><meta charset='utf-8'><body style='background:#f7f8fa;color:#5b6d89;font:16px -apple-system;text-align:center;padding:27vh 20px'>大肥鱼正在醒来…<p style='font-size:12px;color:#909db1'>启动本地鱼塘，稍等一下。</p></body></html>", baseURL: nil)
@@ -129,7 +132,11 @@ final class FishDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKN
         network.dataTask(with: desktopRequest(base.appendingPathComponent("api/companion"))) { data, response, _ in
             if (response as? HTTPURLResponse)?.statusCode == 401 { self.network.dataTask(with: self.desktopRequest(self.base)) { _, _, _ in DispatchQueue.main.async { self.petPolling = false } }.resume(); return }
             let snapshot = data.flatMap { (try? JSONSerialization.jsonObject(with: $0)) as? [String: Any] }
-            DispatchQueue.main.async { self.petPolling = false; self.pet?.update(snapshot ?? ["animation": "idle", "label": "鱼塘暂时离线"]) }
+            DispatchQueue.main.async {
+                self.petPolling = false
+                self.interruptions.update(allowed: snapshot?["can_interrupt"] as? Bool ?? false, minutes: snapshot?["activity_minutes"] as? Double, now: Date())
+                self.pet?.update(snapshot ?? ["animation": "idle", "label": "鱼塘暂时离线"])
+            }
         }.resume()
     }
     @objc func showHermes() { pendingPanel = true; showWindow(); openPendingPanel() }
@@ -144,6 +151,7 @@ final class FishDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKN
     }
     @objc func showFromMenu() { showWindow() }
     func showWindow(letter: String? = nil) {
+        recordActivity()
         if let letter = letter { pendingLetter = letter }
         window?.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps: true)
         web.needsLayout = true; web.needsDisplay = true
@@ -270,6 +278,7 @@ final class FishDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKN
         guard message.frameInfo.isMainFrame, let url = message.frameInfo.request.url, localURL(url), let body = message.body as? [String: String] else { return }
         if body["type"] == "app.folder", let folder = body["folder"], let relative = ["reports":"reports", "memory":".hermes/memories", "logs":".setup"][folder] { NSWorkspace.shared.open(URL(fileURLWithPath: root + "/" + relative)) }
         if body["type"] == "notifications.status" { publishNotificationStatus() }
+        if body["type"] == "ui.presence" { recordActivity(publish: false) }
         if body["type"] == "ui.ready" { loaded = true; uiReady = true; pageNeedsRecovery = false; recoveryAttempts = 0; recoveryOverlay?.removeFromSuperview(); recoveryOverlay = nil; publishPetStatus(); openPendingPanel(); openPendingSettings(); if let text = pendingPetText { pendingPetText = nil; sendPet(text) } }
         if body["type"] == "notifications.request" { requestNotifications() }
         if body["type"] == "notifications.settings" { notificationSettings() }
@@ -284,6 +293,12 @@ final class FishDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKN
         if body["type"] == "pet.peek.toggle" { pet.togglePeek() }
         if body["type"] == "pet.greeting.preview" { pet.previewGreeting() }
     }
+    func recordActivity(publish: Bool = true) {
+        let now = Date(); interruptions.noteActivity(now: now)
+        guard publish && now.timeIntervalSince(lastPresenceSent) > 60 else { return }; lastPresenceSent = now
+        var request = desktopRequest(base.appendingPathComponent("api/presence")); request.httpMethod = "POST"; request.setValue("application/json", forHTTPHeaderField: "Content-Type"); request.setValue("studio", forHTTPHeaderField: "X-Fish-Client"); request.httpBody = Data("{}".utf8)
+        network.dataTask(with: request).resume()
+    }
     func pollInbox() {
         guard !polling else { return }; polling = true
         network.dataTask(with: desktopRequest(base.appendingPathComponent("api/inbox"))) { data, response, _ in
@@ -294,13 +309,16 @@ final class FishDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKN
                 self.polling = false
                 guard let data = data, let snapshot = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any], let messages = snapshot["messages"] as? [[String: Any]] else { return }
                 let unread = snapshot["unread"] as? Int ?? 0; NSApp.dockTile.badgeLabel = unread > 0 ? String(unread) : nil
+                self.interruptions.update(allowed: snapshot["can_interrupt"] as? Bool ?? false, minutes: (snapshot["settings"] as? [String: Any])?["activityMinutes"] as? Double, now: Date())
+                let eligible = Set(snapshot["alert_ids"] as? [String] ?? [])
                 UNUserNotificationCenter.current().getNotificationSettings { settings in
                     guard settings.authorizationStatus == .authorized || settings.authorizationStatus == .provisional else { return }
                     DispatchQueue.main.async {
+                        guard self.interruptions.allows(now: Date()), self.pet?.visible != true else { return }
                         for message in messages where message["read_at"] is NSNull && message["notified_at"] is NSNull {
                             guard let id = message["id"] as? String, let text = message["text"] as? String, let timestamp = message["sent_at"] as? String, !self.notifying.contains(id) else { continue }
                             let date = ISO8601DateFormatter(); date.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-                            guard let sent = date.date(from: timestamp), Date().timeIntervalSince(sent) < 86400 else { continue }
+                            guard eligible.contains(id), let sent = date.date(from: timestamp), Date().timeIntervalSince(sent) >= -60, Date().timeIntervalSince(sent) < 15 * 60 else { continue }
                             let content = UNMutableNotificationContent(); content.title = "大肥鱼"; content.body = text; content.threadIdentifier = "fish-discoveries"; content.userInfo = ["letter_id": id]
                             self.notifying.insert(id)
                             UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: "fish-" + id, content: content, trigger: nil)) { error in
