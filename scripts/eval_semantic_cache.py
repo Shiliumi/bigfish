@@ -21,6 +21,21 @@ IDENTITY={'repo':'Qdrant/bge-small-zh-v1.5','revision':REVISION,'weight_sha256':
           'tokenizer_sha256':TOKENIZER_SHA,'dimension':512,'pooling':'normalized CLS','query_instruction':True}
 
 
+class ProcessEncoder:
+    """Developer adapter exercising the exact bounded client; NumPy is only for replay matrices."""
+    def __init__(self,home):
+        import numpy as np
+        self.np=np;self.home=Path(home)
+    def encode(self,texts,query=False):
+        from fish_embedding_process import encode
+        result=[]
+        for start in range(0,len(texts),16):
+            vectors=encode(self.home,texts[start:start+16],query=query,timeout=2 if query else 10)
+            if vectors is None:raise ValueError('Isolated encoder unavailable; replay stopped without substituting fake vectors.')
+            result.extend(vectors)
+        return self.np.asarray(result,dtype=self.np.float32)
+
+
 def encode_jobs(encoder,jobs):
     texts=[text for job in jobs for text in job.texts]
     if not texts:return []
@@ -89,13 +104,13 @@ def lifecycle(encoder,root,now):
     return checks
 
 
-def evaluate(directory):
+def evaluate(directory=None,*,runtime_home=None):
     fixture_names=['memory_replay.json','semantic_transfer.json','lexical_precision.json']
     raw={name:(ROOT/'tests/fixtures'/name).read_bytes()for name in fixture_names}
     fixtures={name:json.loads(value)for name,value in raw.items()};base=fixtures[fixture_names[0]]
     fixture={**base,'episodes':[row for name in fixture_names for row in fixtures[name]['episodes']]}
     cases=base['queries']+base['semantic_stress']+[row for name in fixture_names[1:]for row in fixtures[name]['queries']]
-    started=time.perf_counter();encoder=Encoder(directory);load_ms=(time.perf_counter()-started)*1000
+    started=time.perf_counter();encoder=ProcessEncoder(runtime_home)if runtime_home else Encoder(directory);load_ms=(time.perf_counter()-started)*1000
     with tempfile.TemporaryDirectory(prefix='fish-semantic-cache-')as temporary:
         root=Path(temporary);now,mapping=populate(root/'replay',fixture)
         with Journal(root/'replay',now=now)as journal:
@@ -143,6 +158,7 @@ def evaluate(directory):
     peak=resource.getrusage(resource.RUSAGE_SELF).ru_maxrss/(1024**2 if sys.platform=='darwin'else 1024)
     return {'scope':'Fictional temporary stores, exact cached-versus-fresh retrieval parity. No private chat, network, paid API or installed recall changes.',
             'storage':'source-local derived tables, transactional invalidation; primary schema version unchanged',
+            'encoder_mode':'bounded process per batch'if runtime_home else 'in-process developer encoder',
             'model':IDENTITY,'fixture_hashes':{name:hashlib.sha256(value).hexdigest()for name,value in raw.items()},
             'dependencies':{name:importlib.metadata.version(name)for name in ['onnxruntime','tokenizers','numpy']},
             'source_rows':fresh_timing['source_rows'],'queries':len(cases),'cold_cache':cold,
@@ -151,12 +167,15 @@ def evaluate(directory):
                           'allocated_page_growth_bytes':allocated_after-allocated_before,
                           'rank_and_resolve_median_ms':round(statistics.median(latencies),3),
                           'rank_and_resolve_p95_ms':round(sorted(latencies)[int(.95*(len(latencies)-1))],3)},
-            'resources':{'encoder_load_checksum_ms':round(load_ms,2),'query_encoding_median_ms':round(statistics.median(single),3),'peak_rss_mib':round(peak,1)},
+            'resources':{('client_initialization_ms'if runtime_home else 'encoder_load_checksum_ms'):round(load_ms,2),
+                         'query_encoding_median_ms':round(statistics.median(single),3),'parent_peak_rss_mib':round(peak,1),
+                         'children_peak_rss_mib':round(resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss/(1024**2 if sys.platform=='darwin'else 1024),1)},
             'lifecycle_checks':checks,'cases':compared}
 
 
 if __name__=='__main__':
-    parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('--model-dir',type=Path,required=True);parser.add_argument('--output',type=Path)
-    args=parser.parse_args();result=evaluate(args.model_dir)
+    parser=argparse.ArgumentParser(description=__doc__);group=parser.add_mutually_exclusive_group(required=True)
+    group.add_argument('--model-dir',type=Path);group.add_argument('--runtime-home',type=Path);parser.add_argument('--output',type=Path)
+    args=parser.parse_args();result=evaluate(args.model_dir,runtime_home=args.runtime_home)
     if args.output:args.output.write_text(json.dumps(result,ensure_ascii=False,indent=2)+'\n')
     print(json.dumps({key:value for key,value in result.items()if key!='cases'},ensure_ascii=False,indent=2))

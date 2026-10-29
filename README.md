@@ -134,6 +134,8 @@ swiftc desktop/PetBehavior.swift scripts/test_pet_behavior.swift -o /tmp/bigfish
 
 另有 [本地语义检索隔离实验](docs/semantic-memory-study.md)，使用单独环境与虚构记忆比较漏召回、误召回和资源开销；后续 [持久缓存验证](docs/semantic-cache-study.md) 与 [同库事务清理](docs/semantic-cache-transactions.md) 检查更正、遗忘、到期、迟到写入与模型标识变更。向量模型与依赖是可选开发材料，正式应用没有接入。
 
+可选编码环境现可按 [项目运行时说明](docs/semantic-runtime.md) 独立准备，使用项目内 Python、哈希锁定依赖和限时子进程；安装完成也不会自动改动聊天召回或增加界面设置。
+
 ## 数据与 Git 忽略规则
 
 | 路径 | 内容 | 上传 Git |

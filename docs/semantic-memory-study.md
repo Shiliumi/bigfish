@@ -62,4 +62,4 @@ curl --fail --location https://huggingface.co/Qdrant/bge-small-zh-v1.5/resolve/4
 
 本地补充检索值得保留为候选，正式应用暂沿用现有召回。先修复泛词触发的误取，再验证向量缓存对纠正、遗忘、到期、版本变化的同步失效，以及真实生命周期中的查询耗时。小型开发集里增加七个目标且未增加误取，仍不足以证明可安全泛化；不为这一结果增加设置面板或后台常驻服务。
 
-后续已分别完成 [泛词召回证据调整](recall-evidence.md)、[持久缓存的隔离验证](semantic-cache-study.md)，以及 [同库事务清理](semantic-cache-transactions.md)。候选缓存覆盖来源变更、迟到编码、重开与模型标识切换，仍未安装到正式应用；可移植运行时、超时降级与误联想尚待接入前处理。
+后续已分别完成 [泛词召回证据调整](recall-evidence.md)、[持久缓存的隔离验证](semantic-cache-study.md)、[同库事务清理](semantic-cache-transactions.md)，以及 [项目自有运行时与限时编码进程](semantic-runtime.md)。候选仍未安装到正式应用；召回层降级联调与误联想测试尚待接入前处理。
