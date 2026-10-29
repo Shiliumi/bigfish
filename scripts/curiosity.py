@@ -202,7 +202,7 @@ def locked(root):
 def main():
     parser = argparse.ArgumentParser()
     sub = parser.add_subparsers(dest='command', required=True)
-    sub.add_parser('agenda'); sub.add_parser('status')
+    sub.add_parser('agenda'); sub.add_parser('status');sub.add_parser('briefing')
     sub.add_parser('reconcile').add_argument('--legacy',action='store_true')
     sub.add_parser('remember').add_argument('file', type=Path)
     sub.add_parser('begin').add_argument('--thread')
@@ -212,7 +212,10 @@ def main():
         from surf_lifecycle import reconcile
         print(json.dumps(reconcile(ROOT,clock(),legacy=args.legacy),ensure_ascii=False));return
     with locked(ROOT):
-        if args.command in ('agenda', 'status'): result = agenda(ROOT)
+        if args.command=='briefing':
+            from surf_briefing import briefing
+            result=briefing(ROOT)
+        elif args.command in ('agenda', 'status'): result = agenda(ROOT)
         elif args.command == 'begin': result = begin(ROOT, args.thread)
         elif args.command == 'remember': result = remember(ROOT, load(args.file, None))
         else: result = finish(ROOT, load(args.file, None))

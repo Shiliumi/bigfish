@@ -1,5 +1,9 @@
 # 一轮冲浪，一次收好
 
+候选 JSON 用现有 write_file 保存，需要改动时用 patch；不为读配置、取时间或拼收尾数据临时执行内联 Python。被审批拒绝的临时代码不要换个写法反复尝试，仍按已有文件工具和下面的项目命令处理。
+
+briefing 的 checked_at 只是准备时刻，不是页面阅读时间；pages.read_at 在实际读取时采集，不用旧时间、估计时间或改时间来凑过验证。出发时刻仍以 begin 返回值为准。
+
 先用 `curiosity.py begin` 取得真实 run.id，再实际浏览。结束时把本轮内容写进一个候选 JSON，运行：
 
 `python3 scripts/surf_complete.py data/curiosity/pending/本轮编号.json`

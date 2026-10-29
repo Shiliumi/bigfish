@@ -157,6 +157,12 @@ swiftc desktop/PetBehavior.swift scripts/test_pet_behavior.swift -o /tmp/bigfish
 
 桌宠改编自 [PC2005-cloud/dsh-pet](https://github.com/PC2005-cloud/dsh-pet)，角色设计来自 [上善无形](https://space.bilibili.com/4456176) 与 [ZipZipPipe](https://space.bilibili.com/4168597)，遵循 CC BY-NC-SA 4.0 及上游的非商业条件。头像与表情来自 [可以叫我云大人 / 雾雪](https://kiriyuki.com)，保留作者说明。探头图片是基于该角色参考的 AI 辅助补绘，仍按角色素材条件处理。
 
+## 冲浪准备合并为一个本地命令
+
+`python3 scripts/curiosity.py briefing` 一次提供时间、出发判断、兴趣和冲浪/收尾协议，减少临时内联脚本和分散读取的准备往返。休息时只返回简短判断，大文件明确另读；不自动出发，不改变审批设置，也不新增界面或模型调用。
+
+296 项 Python 检查通过，并用固定 Hermes 的审批分类器和临时原生任务库验证。已有安装可运行专用迁移器，只更新已知的准备步骤，保留模型、日程、其他提示和学习搭子；无需重启应用或运行 setup_jobs.py。尚未测得真实日常 token 降幅。详见 [准备入口与验证](docs/surf-briefing.md)。应用保持 1.14.3，记忆适配器保持 1.6.5。
+
 ## 记忆适配器 1.6.5：近期说话要求先于表达试行
 
 “少喊称呼、少解释、别总反问、别太像客服”等明确反馈，会在同一会话近期几轮里继续影响接话；后来的要求可撤回或替代，认真任务仍按当前要求完成。表达试行暂缓，相关兴趣和已撤回倾向的复核提示保留，不把短期语气写成长期用户事实。另修复停止解释被当作继续讲解、未来记录影响话风判断的问题。
