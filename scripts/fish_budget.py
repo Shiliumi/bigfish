@@ -18,6 +18,20 @@ OUTPUT_CAP = 8192
 BUCKETS = ('input_tokens','cache_read_tokens','cache_write_tokens','output_tokens')
 
 
+def record_cron_owner(root,session,identity):
+    """Bridge trusted in-process cron identity to the matching tool subprocess, without text."""
+    if not isinstance(session,str)or not session or not identity or getattr(identity,'job_name',None)!='fish-surf':return
+    values={key:getattr(identity,key,None)for key in ('job_id','execution_id')}
+    if any(not isinstance(value,str)or not 1<=len(value)<=200 for value in values.values()):return
+    import tempfile
+    root=Path(root).resolve();folder=root/'data/curiosity/owners'
+    if not folder.resolve().is_relative_to(root):raise ValueError('Cron owner metadata escaped project.')
+    folder.mkdir(parents=True,exist_ok=True,mode=0o700)
+    with tempfile.NamedTemporaryFile('w',encoding='utf8',dir=folder,delete=False)as stream:
+        json.dump(values,stream);temporary=Path(stream.name)
+    temporary.chmod(0o600);temporary.replace(folder/(hashlib.sha256(session.encode()).hexdigest()+'.json'))
+
+
 class Budget:
     def __init__(self, root, now=None):
         self.root = Path(root)

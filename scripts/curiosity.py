@@ -68,6 +68,9 @@ def available(value, now, root):
         return False, '今天的出发额度已经用完，先消化一下。'
     if runs and now - datetime.fromisoformat(runs[-1]['started_at']) < timedelta(hours=2):
         return False, '刚逛回来，先歇一会儿。'
+    from surf_lifecycle import prepared_receipts
+    if prepared_receipts(root):
+        return False, '上次收尾等待本地恢复，先不开始新一轮。'
     return True, ''
 
 
@@ -147,6 +150,9 @@ def begin(root, thread_id=None, now=None):
     thread = next((v for v in agenda(root, now)['threads'] if v['id'] == thread_id), None) if thread_id else None
     if thread_id and not thread: raise ValueError('这条线索已经冷却或不在当前候选里，请重新看 agenda。')
     run = {'id': 'browse-' + uuid4().hex[:16], 'started_at': now.isoformat(), 'thread_id': thread_id, 'status': 'started', 'question': thread['question'] if thread else '这次随便看看，遇到喜欢的再留下问题'}
+    from surf_lifecycle import current_owner
+    owner=current_owner(root,now)
+    if owner:run['cron_execution']=owner
     value['runs'].append(run); value['runs'] = value['runs'][-128:]
     if thread:
         original = next(v for v in value['threads'] if v['id'] == thread_id)
@@ -197,10 +203,14 @@ def main():
     parser = argparse.ArgumentParser()
     sub = parser.add_subparsers(dest='command', required=True)
     sub.add_parser('agenda'); sub.add_parser('status')
+    sub.add_parser('reconcile').add_argument('--legacy',action='store_true')
     sub.add_parser('remember').add_argument('file', type=Path)
     sub.add_parser('begin').add_argument('--thread')
     sub.add_parser('finish').add_argument('file', type=Path)
     args = parser.parse_args()
+    if args.command=='reconcile':
+        from surf_lifecycle import reconcile
+        print(json.dumps(reconcile(ROOT,clock(),legacy=args.legacy),ensure_ascii=False));return
     with locked(ROOT):
         if args.command in ('agenda', 'status'): result = agenda(ROOT)
         elif args.command == 'begin': result = begin(ROOT, args.thread)

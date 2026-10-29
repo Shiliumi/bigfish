@@ -60,6 +60,27 @@ class CompleteTest(unittest.TestCase):
         self.assertTrue((self.root/self.payload['report']['path']).exists())
         self.assertFalse((self.root/'data/outbox'/f'{self.run}.json').exists())
         self.assertTrue(self.complete()['already_submitted']);self.assertEqual(len(personality.observations(self.root)),1)
+    def test_prepared_plan_recovers_locally_without_candidate_or_model_and_is_idempotent(self):
+        actual=finish.write_bytes
+        def crash(path,value):
+            if path==self.root/'data/personality/observations.jsonl':raise OSError('simulated interruption')
+            return actual(path,value)
+        with patch.object(finish,'write_bytes',side_effect=crash):
+            with self.assertRaises(OSError):self.complete()
+        self.assertFalse(curiosity.begin(self.root,now=self.now+timedelta(hours=3))['started'])
+        self.assertEqual(finish.recover(self.root),{'recovered':1});self.assertEqual(finish.recover(self.root),{'recovered':0})
+        self.assertEqual(curiosity.state(self.root)['runs'][0]['status'],'finished');self.assertEqual(len(personality.observations(self.root)),1)
+        self.assertEqual(len(list((self.root/'data/outbox').glob('*.json'))),1)
+    def test_local_recovery_refuses_conflicting_external_changes(self):
+        actual=finish.write_bytes
+        def crash(path,value):
+            if path==self.root/'data/personality/observations.jsonl':raise OSError('interrupted')
+            return actual(path,value)
+        with patch.object(finish,'write_bytes',side_effect=crash):
+            with self.assertRaises(OSError):self.complete()
+        file=self.root/'data/surf-state.json';file.write_text('{"visited":[],"manual":"keep"}');before=file.read_bytes()
+        with self.assertRaises(ValueError):finish.recover(self.root)
+        self.assertEqual(file.read_bytes(),before)
     def test_crash_conflicting_external_edit_is_never_overwritten(self):
         actual=finish.write_bytes
         def crash(path,value):

@@ -24,7 +24,7 @@ def stopped(reason):
 
 
 class Guard:
-    def __init__(self,root,module):self.root=root;self.module=module
+    def __init__(self,root,module,cron_identity=None):self.root=root;self.module=module;self.cron_identity=cron_identity
 
     def usage(self,response,context):
         raw=getattr(response,'usage',None)
@@ -37,6 +37,9 @@ class Guard:
 
     def execute(self,request,next_call,**context):
         is_background=background(context);ident='main-'+uuid4().hex;prepared=request
+        if is_background and self.cron_identity:
+            try:self.module.record_cron_owner(self.root,context.get('session_id',''),self.cron_identity())
+            except Exception:pass  # Missing identity leaves the outing unbound; never guess its owner.
         try:
             with self.module.Budget(self.root) as ledger:
                 if is_background:
@@ -88,7 +91,7 @@ def register(ctx):
     if home.name!='.hermes' or not (root/'scripts/fish_budget.py').is_file():raise ValueError('Budget requires the project Hermes home.')
     spec=importlib.util.spec_from_file_location('_bigfish_request_budget',Path(__file__).with_name('budget.py'))
     module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
-    guard=Guard(root,module)
+    guard=Guard(root,module,cron_identity=getattr(ctx,'current_cron_execution',None))
     ctx.register_middleware('llm_execution',guard.execute)
     ctx.register_hook('pre_auxiliary_call',guard.pre_auxiliary)
     ctx.register_hook('post_auxiliary_call',guard.post_auxiliary)

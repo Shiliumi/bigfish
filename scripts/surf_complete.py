@@ -73,6 +73,19 @@ def validate_page(page,run,now,report):
     return {'url':url,'title':title,'read_at':seen.isoformat()}
 
 
+def recover(root):
+    """Replay only already-validated prepared plans, with the original preimage checks."""
+    from surf_lifecycle import prepared_receipts
+    root=Path(root).resolve();count=0
+    with ExitStack()as stack:
+        for relative in ('data/curiosity/.lock','data/personality/.lock'):
+            file=safe_path(root,relative);file.parent.mkdir(parents=True,exist_ok=True)
+            handle=stack.enter_context(file.open('a'));fcntl.flock(handle,fcntl.LOCK_EX)
+        for path,receipt in prepared_receipts(root):
+            apply_plan(root,receipt,path);count+=1
+    return {'recovered':count}
+
+
 def complete(root,data,now=None):
     now=curiosity.clock(now)
     if not isinstance(data,dict) or len(json.dumps(data,ensure_ascii=False).encode())>180_000:raise ValueError('请提交有限的本轮收尾 JSON。')
@@ -168,8 +181,9 @@ def complete(root,data,now=None):
 
 
 def main():
-    parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('file',type=Path);args=parser.parse_args()
-    try:print(json.dumps(complete(ROOT,json.loads(args.file.read_text())),ensure_ascii=False))
+    parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('file',type=Path,nargs='?');parser.add_argument('--recover',action='store_true');args=parser.parse_args()
+    if bool(args.file)==args.recover:parser.error('Provide a candidate file or --recover.')
+    try:print(json.dumps(recover(ROOT)if args.recover else complete(ROOT,json.loads(args.file.read_text())),ensure_ascii=False))
     except (ValueError,TypeError,KeyError,OSError) as error:raise SystemExit(str(error)) from None
 
 

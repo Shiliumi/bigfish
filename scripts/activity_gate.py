@@ -89,6 +89,10 @@ def evaluate(root, mode, now=None, persist=True):
     elif previous.get('lease_until') and datetime.fromisoformat(previous['lease_until']) > now:
         decision['reason'] = '本轮机会已唤醒，等待完成或租约到期。'
     elif mode == 'surf':
+        if persist:
+            from surf_complete import recover
+            from surf_lifecycle import reconcile
+            decision['maintenance']={**recover(root),**reconcile(root,now)}
         status = curiosity.agenda(root, now)
         decision.update(wakeAgent=status['can_go'], reason=status['rest_reason'] or '还有出发额度，可以选择想看的内容。')
         decision['context'] = {'used_today': status['used_today'], 'daily_limit': status['daily_limit']}
