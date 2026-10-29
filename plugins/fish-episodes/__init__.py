@@ -1,7 +1,10 @@
 """Bigfish local episodic recall; native MEMORY.md / USER.md remain authoritative."""
 import importlib.util
+import importlib
+import hashlib
 import json
 import re
+import sys
 from pathlib import Path
 from agent.memory_provider import MemoryProvider
 
@@ -34,6 +37,7 @@ class FishEpisodes(MemoryProvider):
         self.growth = None
         self.conversation = None
         self.matters = None
+        self.semantic = None
         if growth_file.is_file():
             growth_spec = importlib.util.spec_from_file_location('_bigfish_bound_growth', growth_file)
             self.growth = importlib.util.module_from_spec(growth_spec)
@@ -46,6 +50,17 @@ class FishEpisodes(MemoryProvider):
         if matters_file.is_file():
             spec=importlib.util.spec_from_file_location('_bigfish_bound_matters',matters_file)
             helper=importlib.util.module_from_spec(spec);spec.loader.exec_module(helper);self.matters=helper.Matters
+        directory=Path(__file__).with_name('semantic')
+        if kwargs.get('agent_context','primary')=='primary'and(directory/'__init__.py').is_file():
+            # Separate namespace per installed checkout/version; no sys.path changes or profile sharing.
+            try:
+                digest=hashlib.sha256(str(directory.resolve()).encode()+b''.join(path.read_bytes()for path in sorted(directory.glob('*.py')))).hexdigest()[:20]
+                package='_bigfish_semantic_'+digest
+                if package not in sys.modules:
+                    spec=importlib.util.spec_from_file_location(package,directory/'__init__.py',submodule_search_locations=[str(directory)])
+                    module=importlib.util.module_from_spec(spec);sys.modules[package]=module;spec.loader.exec_module(module)
+                self.semantic=importlib.import_module(package+'.fish_semantic_recall').SemanticRecall(self.root)
+            except (ImportError,OSError,ValueError,AttributeError,SyntaxError):self.semantic=None
         self.session_id = session_id
         self.primary = kwargs.get('agent_context', 'primary') == 'primary'
         self.eligible = self.primary
@@ -72,7 +87,7 @@ class FishEpisodes(MemoryProvider):
         if not self.eligible:
             return ''
         with self.journal(self.root) as journal:
-            recalled = journal.recall(query, exclude_session=session_id or self.session_id)
+            recalled = self._recall(journal,query,exclude_session=session_id or self.session_id,automatic=True)
             mode=self.conversation.classify(query) if self.conversation else None
             preferences = self.growth.preference_context(self.root, query, journal=journal, tokenize=self.tokenize,style_mode=mode) if self.growth else []
             style=self.conversation.context(self.root,query,journal=journal,session_id=session_id or self.session_id,tokenize=self.tokenize,sanitize=self.sanitize)if self.conversation else ''
@@ -85,7 +100,14 @@ class FishEpisodes(MemoryProvider):
                 recalled=prefix+'\n'+json.dumps(rows,ensure_ascii=False)if rows else ''
             return '\n'.join(s for s in (style,matter_block,recalled,preference_block)if s)
 
+    def _recall(self,journal,query,*,exclude_session='',automatic=False):
+        if self.semantic:
+            try:return self.semantic.recall(journal,query,exclude_session=exclude_session,automatic=automatic)
+            except Exception:pass
+        return journal.recall(query,exclude_session=exclude_session)
+
     def sync_turn(self, user_content, assistant_content, *, session_id='', **kwargs):
+        episode=None;eligible=False
         try:
             author=kwargs.get('turn_author')
             eligible=self.primary and not bool(author.get('is_bot')) if isinstance(author,dict) else self.eligible
@@ -100,12 +122,16 @@ class FishEpisodes(MemoryProvider):
         finally:
             # The manager syncs asynchronously: an older completed turn must not clear a newer one.
             if self.current_user == user_content:self.current_user = ''
+        if eligible and episode and self.semantic:
+            try:
+                with self.journal(self.root)as journal:self.semantic.index_pending(journal,preferred=episode['id'])
+            except Exception:pass
 
     def get_tool_schemas(self):
         # Hermes registers tool routes before initialize() supplies the agent context.
         if self.primary is False:
             return []
-        return [{'name': 'fish_recall', 'description': '按话题、简称、已设置别名或日期找回具体共同聊天经历。支持昨天、前天、上周及明确日期；返回来源与相关原片段，找不到别编，换个具体线索或坦言没找到。',
+        return [{'name': 'fish_recall', 'description': '按话题、转述、简称、已设置别名或日期找回具体共同聊天经历。支持昨天、前天、上周及明确日期；可选本地语义补充返回候选原话，不代表所问细节已记录，找不到别编。',
                  'parameters': {'type': 'object', 'properties': {'query': {'type': 'string', 'description': '具体话题、作品、两字昵称或未完问题'}}, 'required': ['query'], 'additionalProperties': False}},
                 {'name':'fish_correct_memory','description':'用户明确纠正记错的旧回忆时，以当前用户原话更新该段共同经历；不能凭猜测改写，不修改核心 USER。先用 fish_recall 取得 id 和 revision。',
                  'parameters':{'type':'object','properties':{'id':{'type':'string'},'revision':{'type':'integer'},'quote':{'type':'string','description':'当前用户消息中的原文片段，最多450字，不能改写；留空使用当前原话。'}},'required':['id','revision'],'additionalProperties':False}},
@@ -136,7 +162,8 @@ class FishEpisodes(MemoryProvider):
         if tool_name != 'fish_recall':
             return json.dumps({'error':'不支持这项回忆操作。'},ensure_ascii=False)
         with self.journal(self.root) as journal:
-            return json.dumps({'context': journal.recall(str(args.get('query', ''))[:500])}, ensure_ascii=False)
+            query=str(args.get('query',''))[:500]
+            return json.dumps({'context':self._recall(journal,query)},ensure_ascii=False)
 
     def get_config_schema(self):
         return []

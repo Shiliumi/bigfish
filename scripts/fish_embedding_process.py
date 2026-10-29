@@ -11,7 +11,10 @@ import signal
 import subprocess
 import time
 import uuid
-from fish_embeddings import MODEL_IDENTITY,MODEL_SHA
+if __package__:
+    from .fish_embeddings import MODEL_IDENTITY,MODEL_SHA
+else:
+    from fish_embeddings import MODEL_IDENTITY,MODEL_SHA
 
 PROTOCOL=1
 MODEL_KEY=hashlib.sha256(json.dumps(MODEL_IDENTITY,sort_keys=True,separators=(',',':')).encode()).hexdigest()

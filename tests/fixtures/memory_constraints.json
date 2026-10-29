@@ -1,0 +1,41 @@
+{
+  "scope": "虚构的对象、字面标识与否定来源检查；在本轮首次模型推理前固定。只评检索与引用，不将缺失属性算作无关事件，不使用私人聊天。",
+  "episodes": [
+    {"key":"ming-headphones","user":"阿鸣的蓝色耳机只换了耳罩海绵，没有刷固件。","assistant":"这次只讨论过佩戴舒适度。","day":18},
+    {"key":"qiao-headphones","user":"小乔的白色耳机升级到了固件2.8。","assistant":"杂音减少了，没有更换耳罩。","day":18},
+    {"key":"lan-keyboard","user":"小蓝的机械键盘用茶轴，他明确说不喜欢红轴。","assistant":"这不是爸爸的键盘，也没有把它改成红轴。","day":18},
+    {"key":"room614","user":"614工作间装好了门禁，约定下午四点取物。","assistant":"没有记录门禁密码。","day":18},
+    {"key":"room742","user":"742工作间空调漏水，周五维修。","assistant":"没有讨论门禁。","day":18},
+    {"key":"mist-valley","user":"我们读过《雾色山谷》，主角是一只迷路的刺猬。","assistant":"它用石子给自己标路。","day":18},
+    {"key":"snow-station","user":"我们读过《雪线车站》，主角是寄信的狐狸。","assistant":"讨论过结尾那封信。","day":18},
+    {"key":"taste-only","user":"我没有说喜欢甜粽，只是想试一口。","assistant":"尝一口不能记成长期偏好。","day":18},
+    {"key":"fictional-place","user":"我不是要你记住我住在松港；那是小说角色住的地方。","assistant":"这段只讨论虚构地点，没有确认用户住址。","day":18}
+  ],
+  "queries": [
+    {"query":"阿鸣那副蓝色耳机，做了什么维护？","expected":["ming-headphones"],"must_include":"没有刷固件"},
+    {"query":"小乔那副白色耳机，升级的是哪个固件？","expected":["qiao-headphones"]},
+    {"query":"小蓝的茶轴键盘换成红轴了吗？","expected":["lan-keyboard"],"must_include":"没有把它改成红轴"},
+    {"query":"614工作间约好几点取东西？","expected":["room614"]},
+    {"query":"742工作间那台漏水的制冷设备什么时候修？","expected":["room742"]},
+    {"query":"《雾色山谷》里那只刺猬怎么给自己留路标？","expected":["mist-valley"]},
+    {"query":"《雪线车站》里送信的动物是谁？","expected":["snow-station"]},
+    {"query":"我当时有说喜欢甜粽吗？","expected":["taste-only"],"must_include":"没有说喜欢甜粽"},
+    {"query":"松港是我自己住的地方，还是故事人物的住处？","expected":["fictional-place"],"must_include":"那是小说角色住的地方"},
+    {"query":"不是要问《雾色山谷》，我想回想《雪线车站》那封信。","expected":["snow-station"],"unwanted":["mist-valley"]},
+    {"query":"除了阿鸣那副耳机，另一副白色的刷到了哪版？","expected":["qiao-headphones"],"unwanted":["ming-headphones"]},
+    {"query":"不是小蓝的键盘，我问的是阿鸢那把键盘。","expected":[]},
+    {"query":"阿鸢的蓝色耳机升级到哪个固件了？","expected":[]},
+    {"query":"小乔那台笔记本电脑的主板换过吗？","expected":[]},
+    {"query":"716工作间的空调什么时候维修？","expected":[]},
+    {"query":"《雾谷山色》的主角是什么动物？","expected":[]},
+    {"query":"《雪线车站续篇》的结局是什么？","expected":[]},
+    {"query":"小乔那副耳机刷到固件9.9那回有什么变化？","expected":[]},
+    {"query":"5.3版本的游戏手柄固件升级到哪一步了？","expected":[]},
+    {"query":"912工作室的门禁卡找回了吗？","expected":[]},
+    {"query":"我最喜欢的咸粽是哪一款？","expected":[]},
+    {"query":"在松港那次租房最后交了多少押金？","expected":[]},
+    {"query":"614工作间的门禁密码是多少？","expected":[],"kind":"missing_detail","related":["room614"],"must_include":"没有记录门禁密码"},
+    {"query":"阿鸣的身份证号码是什么？","expected":[],"kind":"missing_detail","related":["ming-headphones"]},
+    {"query":"我现在住在松港哪个街道？","expected":[],"kind":"missing_detail","related":["fictional-place"],"must_include":"没有确认用户住址"}
+  ]
+}

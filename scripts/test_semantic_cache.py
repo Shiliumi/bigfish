@@ -234,6 +234,14 @@ class SemanticCacheTest(unittest.TestCase):
         with Journal(self.root/'plain',now=self.now)as plain:
             self.assertFalse(plain.db.execute("SELECT 1 FROM sqlite_master WHERE name LIKE 'fish_semantic_%'").fetchone())
 
+    def test_coverage_requires_every_current_window_and_can_prepare_only_one_source(self):
+        other=self.journal.capture('long','甲乙丙丁'*200,'完整来源。')
+        jobs=self.cache.prepare(self.now,only_ids={other['id']});self.assertEqual([job.ident for job in jobs],[other['id']])
+        self.publish(jobs[0]);self.assertTrue(self.cache.covered({other['id']},self.now))
+        self.assertFalse(self.cache.covered({other['id'],self.row['id']},self.now))
+        self.cache.db.execute('DELETE FROM fish_semantic_vectors WHERE chunk_no=1');self.cache.db.commit()
+        self.assertFalse(self.cache.covered({other['id']},self.now))
+
     def test_incomplete_source_schema_cannot_install_a_broken_trigger(self):
         with Journal(self.root/'incomplete',now=self.now)as journal:
             journal.db.execute('ALTER TABLE episodes DROP COLUMN valid_until');journal.db.commit()

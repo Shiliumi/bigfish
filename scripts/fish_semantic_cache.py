@@ -9,7 +9,10 @@ from numbers import Real
 from pathlib import Path
 import sqlite3
 import struct
-from fish_journal import instant,SCHEMA_VERSION
+if __package__:
+    from .fish_journal import instant,SCHEMA_VERSION
+else:
+    from fish_journal import instant,SCHEMA_VERSION
 
 PIPELINE={'version':1,'window':280,'stride':220,'normalization':'l2-f32-le'}
 CACHE_SCHEMA=2
@@ -73,7 +76,8 @@ def discard_cache(journal):
 
 
 class SemanticCache:
-    def __init__(self,journal,identity):
+    def __init__(self,journal,identity,*,timeout=5):
+        self.timeout=timeout
         self.root=Path(journal.root).resolve();directory=self.root/'data/memory'
         self.source=directory/'episodes.sqlite3';legacy=directory/'semantic-cache.sqlite3'
         if not directory.resolve().is_relative_to(self.root)or not self.source.resolve().is_relative_to(directory.resolve()):raise ValueError('Cache must stay in its own memory directory.')
@@ -89,7 +93,7 @@ class SemanticCache:
         if not identity.get('repo')or not identity.get('revision')or not identity.get('pooling')or 'query_instruction'not in identity:raise ValueError('Complete model identity required.')
         self.model=hashlib.sha256(json.dumps({'identity':identity,'pipeline':PIPELINE},sort_keys=True,separators=(',',':')).encode()).hexdigest()
         self.metadata={'schema':str(CACHE_SCHEMA),'home':self.home,'model':self.model}
-        self.db=sqlite3.connect(self.source.resolve().as_uri()+'?mode=rw',uri=True,timeout=5);self.db.row_factory=sqlite3.Row
+        self.db=sqlite3.connect(self.source.resolve().as_uri()+'?mode=rw',uri=True,timeout=timeout);self.db.row_factory=sqlite3.Row
         try:
             if self.db.execute('PRAGMA user_version').fetchone()[0]!=SCHEMA_VERSION:raise ValueError('Primary journal schema is incompatible; left unchanged.')
             version=self._schema()
@@ -131,7 +135,7 @@ class SemanticCache:
     def _sources(self,now):
         if not self._owns():return {}
         # A fresh read-only connection avoids a caller's old or uncommitted transaction snapshot.
-        with closing(sqlite3.connect(self.source.resolve().as_uri()+'?mode=ro',uri=True,timeout=5))as db:
+        with closing(sqlite3.connect(self.source.resolve().as_uri()+'?mode=ro',uri=True,timeout=self.timeout))as db:
             db.row_factory=sqlite3.Row
             return {r['id']:dict(r)for r in db.execute("SELECT * FROM episodes WHERE status='active'")if live(r,now)}
 
@@ -154,11 +158,12 @@ class SemanticCache:
             if not self._owns():return
             for row in stale:self._remove(row['episode_id'],row['revision'],row['fingerprint'])
 
-    def prepare(self,now=None,limit=64):
+    def prepare(self,now=None,limit=64,only_ids=None):
         if not self._owns():return []
         now=instant(now or datetime.now(timezone.utc));self.prune(now);sources=self._sources(now);jobs=[]
         cached={r['episode_id']:(r['revision'],r['fingerprint'],r['count'])for r in self.db.execute('SELECT episode_id,revision,fingerprint,COUNT(*) count FROM fish_semantic_vectors WHERE model=? GROUP BY episode_id,revision,fingerprint',(self.model,))}
         for row in sources.values():
+            if only_ids is not None and row['id']not in only_ids:continue
             body=meaning(row);aliases='\n'.join(json.loads(row['aliases']))
             texts=tuple(body[i:i+PIPELINE['window']]+('\n'+aliases if aliases else '')for i in range(0,len(body),PIPELINE['stride']))
             stamp=fingerprint(row)
@@ -166,6 +171,18 @@ class SemanticCache:
                 jobs.append(EncodingJob(self.home,self.model,row['id'],row['revision'],stamp,texts))
             if len(jobs)>=max(1,min(128,limit)):break
         return jobs
+
+    def covered(self,idents,now=None):
+        """No confident margin from a corpus whose eligible sources are only partly encoded."""
+        if not self._owns():return False
+        now=instant(now or datetime.now(timezone.utc));sources=self._sources(now)
+        groups={r['episode_id']:dict(r)for r in self.db.execute('SELECT episode_id,revision,fingerprint,COUNT(*) n,MIN(chunk_no) lo,MAX(chunk_no) hi,SUM(length(vector)!=?) malformed FROM fish_semantic_vectors WHERE model=? GROUP BY episode_id,revision,fingerprint',(self.dimension*4,self.model))}
+        for ident in idents:
+            source=sources.get(ident);row=groups.get(ident)
+            if not source or not row or source['revision']!=row['revision']or fingerprint(source)!=row['fingerprint']:return False
+            size=len(range(0,len(meaning(source)),PIPELINE['stride']))
+            if row['n']!=size or row['lo']!=0 or row['hi']!=size-1 or row['malformed']:return False
+        return self._owns()
 
     def _vector(self,values):
         values=list(values)

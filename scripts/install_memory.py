@@ -25,6 +25,10 @@ def main():
     shutil.copy2(ROOT / 'scripts/personality.py', destination / 'growth.py')
     shutil.copy2(ROOT / 'scripts/fish_conversation.py', destination / 'conversation.py')
     shutil.copy2(ROOT / 'scripts/fish_matters.py', destination / 'matters.py')
+    semantic=destination/'semantic';semantic.mkdir(exist_ok=True)
+    (semantic/'__init__.py').write_text('"""Project-bound optional semantic helpers."""\n')
+    for name in ('fish_journal.py','fish_semantic_cache.py','fish_embeddings.py','fish_embedding_process.py','fish_embedding_worker.py','fish_semantic_recall.py'):
+        shutil.copy2(ROOT/'scripts'/name,semantic/name)
     if args.activate:
         config = ROOT / '.hermes/config.yaml'
         if config.exists():

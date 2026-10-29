@@ -141,6 +141,32 @@ def explicit_alias(query,aliases):
     return False
 
 
+def recall_query(query):
+    """Follow an explicit contrast's affirmative clause; never rewrite saved source text."""
+    text=safe_text(query,500)
+    match=re.match(r'^\s*(?:不是|不要找|别找|除了)[^，,；;\n]{1,160}[，,；;\n]\s*((?:我(?:想|问|要|找)|而是|另一|另外|这次).{2,})$',text,re.S)
+    return match[1]if match else text
+
+
+def literal_constraints(query):
+    """Limited literal cues, not general named-entity or logical-relation understanding."""
+    text=lexical(query)
+    return {'titles':re.findall(r'《([^》]{2,80})》',text),
+            'labels':re.findall(r'([阿小][\u3400-\u9fff])(?=的|那|说|用|把|这|有|是|[，,。！？? ]|$)',text),
+            'numbers':re.findall(r'(?<![a-z0-9_.])(?:\d+(?:\.\d+)+|\d{2,})(?![a-z0-9_.])',text)}
+
+
+def satisfies_literals(row,constraints):
+    body=lexical(row['summary']if row['corrected_at']else row['excerpt'])
+    aliases=[lexical(value)for value in json.loads(row['aliases'])]
+    titles=re.findall(r'《([^》]{2,80})》',body)
+    if constraints['titles']and not any(value in titles or value in aliases or '《'+value+'》'in aliases or not titles and value in body for value in constraints['titles']):return False
+    if constraints['labels']and not any(value in body or value in aliases for value in constraints['labels']):return False
+    numbers=body+'\n'+'\n'.join(aliases)+'\n'+row['recorded_at']
+    if constraints['numbers']and not any(re.search(r'(?<![a-z0-9_.])'+re.escape(value)+r'(?![a-z0-9_.])',numbers)for value in constraints['numbers']):return False
+    return True
+
+
 def excerpt_for(row,query):
     if row['corrected_at']:return row['summary']
     user,separator,assistant=row['excerpt'].removeprefix('你：').partition('\n大肥鱼：')
@@ -307,6 +333,7 @@ class Journal:
         query = safe_text(query, 500)
         if re.fullmatch(r'(?:爸爸|爸|爹|大肥鱼)?[，, !！。~～]*(?:早安|晚安|你好|谢谢|哈哈|在吗|好的|收到)[呀啊哦啦呢吗吧 !！。~～?？]*', query):
             return []
+        if strict_evidence:query=recall_query(query)
         original_query=query
         try:query,date_range=dated_query(query,self.now)
         except ValueError:return []
@@ -314,6 +341,7 @@ class Journal:
         anchors=chunks(query)
         parts=query_parts(anchors)
         normalized_query=lexical(query)
+        constraints=literal_constraints(query)if strict_evidence else None
         validity = " AND e.valid_from<=? AND (e.valid_until IS NULL OR e.valid_until>?)" if scope == 'current' else ''
         clock_args = (self.now.isoformat(), self.now.isoformat()) if scope == 'current' else ()
         if date_range:
@@ -330,6 +358,7 @@ class Journal:
                 ''' + validity + ''' ORDER BY bm25(episode_search) LIMIT 200''', (match, exclude_session, *clock_args)).fetchall()
             ranked=[]
             for row in rows:
+                if constraints and not satisfies_literals(row,constraints):continue
                 body=row['summary'] if row['corrected_at'] else row['summary']+'\n'+row['excerpt']
                 aliases=json.loads(row['aliases']);body_terms=set(tokens(body));alias_terms=set(tokens('\n'.join(aliases)))
                 present=body_terms|alias_terms;matched=set(parts)&present
@@ -337,6 +366,9 @@ class Journal:
                 # A small shared fragment of a different subject is not a remembered event.
                 if best<.5 or not matched:continue
                 if strict_evidence and matched.issubset(WEAK_EVIDENCE) and not explicit_alias(normalized_query,aliases):continue
+                # A name alone cannot answer a different concrete topic attached to that name.
+                label_terms=set(tokens(' '.join(constraints['labels'])))if constraints else set()
+                if label_terms and matched.issubset(label_terms|WEAK_EVIDENCE) and set(parts)-label_terms-WEAK_EVIDENCE and not explicit_alias(normalized_query,aliases):continue
                 age = max(0, (self.now - instant(row['corrected_at'] or row['recorded_at'])).total_seconds() / 86400)
                 decay = 1 if row['pinned'] else .6+.4*math.pow(.5,age/(7 if row['kind']=='impression'else 60))
                 relevance=sum(1+math.log1p(len(term))for term in matched)*(1+best)
@@ -360,6 +392,7 @@ class Journal:
 
     def recall(self, query, exclude_session=''):
         if not isinstance(query,str) or not query.strip():return ''
+        query=recall_query(query)
         # An event's date ('昨天买的键盘') is not necessarily when it was discussed.
         try:date_filter=bool(re.search(r'聊|说|提|谈|讨论|对话|记录',query) or not chunks(dated_query(query,self.now)[0]))
         except ValueError:return ''

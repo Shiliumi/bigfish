@@ -18,6 +18,9 @@ class AdapterTest(unittest.TestCase):
         shutil.copy2(source/'plugins/fish-episodes/__init__.py',plugin/'__init__.py');shutil.copy2(source/'scripts/fish_journal.py',plugin/'journal.py');shutil.copy2(source/'scripts/personality.py',plugin/'growth.py')
         shutil.copy2(source/'scripts/fish_conversation.py',plugin/'conversation.py')
         shutil.copy2(source/'scripts/fish_matters.py',plugin/'matters.py')
+        semantic=plugin/'semantic';semantic.mkdir();(semantic/'__init__.py').write_text('')
+        for name in ('fish_journal.py','fish_semantic_cache.py','fish_embeddings.py','fish_embedding_process.py','fish_embedding_worker.py','fish_semantic_recall.py'):
+            shutil.copy2(source/'scripts'/name,semantic/name)
         stub=types.ModuleType('agent.memory_provider');stub.MemoryProvider=type('MemoryProvider',(),{})
         with patch.dict(sys.modules,{'agent.memory_provider':stub}):
             spec=importlib.util.spec_from_file_location('test_fish_adapter',plugin/'__init__.py');module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
@@ -40,6 +43,40 @@ class AdapterTest(unittest.TestCase):
         with Journal(self.root) as journal:self.assertEqual(journal.status()['total'],0)
     def test_foreign_home_never_binds_to_project_memory(self):
         with self.assertRaises(ValueError):self.provider.initialize('other',hermes_home=str(self.root/'foreign'))
+
+    def test_optional_semantic_route_is_bound_and_keeps_existing_tool_names(self):
+        before=list(sys.path);self.initialize();self.assertEqual(sys.path,before)
+        self.assertEqual(self.provider.semantic.root,self.root.resolve())
+        with patch.object(self.provider.semantic,'recall',return_value='fictional source')as recall:
+            self.assertEqual(json.loads(self.provider.handle_tool_call('fish_recall',{'query':'换个说法找回旧事'}))['context'],'fictional source')
+            self.assertEqual(recall.call_args.args[1],'换个说法找回旧事')
+        self.assertEqual({r['name']for r in self.provider.get_tool_schemas()},{'fish_recall','fish_correct_memory','fish_matters'})
+
+    def test_broken_optional_package_cannot_disable_lexical_memory(self):
+        (self.root/'.hermes/plugins/fish-episodes/semantic/fish_embeddings.py').unlink();self.initialize()
+        self.assertIsNone(self.provider.semantic);self.provider.sync_turn('一起看纸风车。','四个叶片。')
+        self.assertIn('四个叶片',self.provider.prefetch('纸风车',session_id='another'))
+
+    def test_indexing_runs_after_authorization_cleanup_and_never_for_bot_turns(self):
+        self.initialize();self.provider.on_turn_start(1,'先聊纸风车。')
+        def index(journal,**kwargs):
+            self.assertEqual(self.provider.current_user,'')
+            self.provider.on_turn_start(2,'你记错了，是蓝色叶片。')
+        with patch.object(self.provider.semantic,'index_pending',side_effect=index)as indexed:
+            self.provider.sync_turn('先聊纸风车。','有四个叶片。',turn_author={'is_bot':False})
+            self.assertEqual(indexed.call_count,1)
+            self.assertEqual(self.provider.current_user,'你记错了，是蓝色叶片。')
+            self.provider.sync_turn('自动投递','自动回复',turn_author={'is_bot':True})
+            self.assertEqual(indexed.call_count,1)
+
+    def test_optional_index_or_lookup_failure_does_not_hide_captured_lexical_memory(self):
+        self.initialize();self.provider.on_turn_start(1,'一起看纸风车。')
+        with patch.object(self.provider.semantic,'index_pending',side_effect=RuntimeError('fixture failure')):
+            self.provider.sync_turn('一起看纸风车。','有四个叶片。')
+        self.assertEqual(self.provider.current_user,'')
+        with patch.object(self.provider.semantic,'recall',side_effect=RuntimeError('fixture failure')):
+            result=json.loads(self.provider.handle_tool_call('fish_recall',{'query':'纸风车'}))
+            self.assertIn('四个叶片',result['context'])
 
     def test_installed_growth_helper_supplies_only_local_trying_context(self):
         from datetime import datetime,timezone
