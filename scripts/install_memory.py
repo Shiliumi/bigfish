@@ -36,7 +36,7 @@ def main():
             backup.mkdir(parents=True, exist_ok=True)
             shutil.copy2(config, backup / 'config.yaml')
         subprocess.run([str(ROOT / 'scripts/fish'), 'config', 'set', 'memory.provider', 'fish-episodes'], check=True)
-    print('本地回忆适配已安装；重启 Hermes 内部接口并开启新对话后生效。')
+    print('本地回忆适配已安装；空闲时重载 gateway 插件和 Hermes 内部接口，后续回合使用新版。')
 
 
 if __name__ == '__main__':

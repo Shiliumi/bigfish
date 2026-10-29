@@ -101,4 +101,13 @@ class PreferenceTest(unittest.TestCase):
         context=growth.preference_context(self.root,'今天天气',now=self.now+timedelta(days=40))
         self.assertEqual(context[0]['stage'],'reconsidering')
 
+    def test_expression_opt_out_does_not_hide_a_recent_withdrawal(self):
+        row=self.episode(0)
+        trial=growth.propose_trial(self.root,{'id':'small-reactions','kind':'expression','text':'我似乎喜欢用短一点的具体反应接话。','reason':'这次聊天确实有一个具体的小反差。','evidence_ids':[row['id']]},self.now)
+        trial=self.follow(trial,1);trial=self.follow(trial,2)
+        growth.apply(self.root,self.proposal(trial),self.now+timedelta(days=3))
+        growth.retire_trial(self.root,{'id':trial['id'],'revision':trial['revision']},self.now+timedelta(days=4))
+        context=growth.preference_context(self.root,'随便聊聊',now=self.now+timedelta(days=4),allow_expression=False)
+        self.assertEqual(context[0]['stage'],'retired')
+
 if __name__=='__main__':unittest.main()

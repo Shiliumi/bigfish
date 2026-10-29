@@ -92,6 +92,23 @@ class AdapterTest(unittest.TestCase):
         self.initialize();context=self.provider.prefetch('积木厨房')
         self.assertIn('trying',context);self.assertNotIn('signals',context);self.assertFalse((self.root/'.hermes/memories/USER.md').exists())
 
+    def test_recent_user_feedback_defers_expression_trials_but_keeps_related_interest(self):
+        from datetime import datetime,timezone
+        import personality as growth
+        now=datetime.now(timezone.utc)
+        with Journal(self.root,now=now)as journal:row=journal.capture('seed','一起看看折纸机关。','那个翻折结构还想再看。')
+        for ident,kind,text in [('wordplay','expression','我似乎喜欢拿每句话的称呼开个玩笑。'),('folding','interest','我似乎喜欢有翻折巧思的折纸机关。')]:
+            growth.propose_trial(self.root,{'id':ident,'kind':kind,'text':text,'reason':'这次确实有具体结构想再试试。','evidence_ids':[row['id']]},now)
+        self.initialize();self.assertIn('拿每句话的称呼',self.provider.prefetch('折纸机关'))
+        self.provider.sync_turn('后面别老喊爸爸，也别每次都用问题收尾。','好，接着聊。')
+        result=self.provider.prefetch('折纸机关')
+        self.assertIn('recent_feedback',result);self.assertNotIn('拿每句话的称呼',result);self.assertIn('有翻折巧思',result)
+        self.assertFalse((self.root/'.hermes/memories/USER.md').exists())
+        release='现在可以正常叫爸爸了，想问就问。'
+        self.assertNotIn('recent_feedback',self.provider.prefetch(release))
+        self.provider.sync_turn(release,'好。')
+        self.assertIn('拿每句话的称呼',self.provider.prefetch('折纸机关'))
+
     def episode(self):
         with Journal(self.root) as store:return store.capture('old-chat','周末一起看积木厨房','你最喜欢红色机关。')
 
