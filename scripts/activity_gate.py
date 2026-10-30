@@ -124,9 +124,9 @@ def inventory(root):
     from fish_journal import Journal
     with Journal(root) as journal:
         episodes = journal.revisions()
-    from personality import trial_state
+    from personality import trial_state, event_fingerprint
     events = trial_state(root)['events']
-    preferences = {row['id']: hashlib.sha256(json.dumps(row, sort_keys=True, ensure_ascii=False).encode()).hexdigest() for row in events}
+    preferences = {row['id']: event_fingerprint(row) for row in events}
     return {'reports': reports, 'observations': observations, 'episodes': episodes, 'preference_events': preferences}
 
 
@@ -217,7 +217,7 @@ def episode_source(journal, key, revision):
 
 
 def review(root, ident, episode=None):
-    from personality import trial_state
+    from personality import review_events, event_fingerprint
     value = snapshot(root, ident)
     selected = value['selected']['episodes']
     if episode is not None and episode not in selected:
@@ -245,12 +245,15 @@ def review(root, ident, episode=None):
             else:
                 episodes.append({k: item[k] for k in ('id', 'revision', 'recorded_at', 'source_ref')} | {
                     'read_required': True, 'command': shlex.join(['python3', 'scripts/activity_gate.py', 'review', '--snapshot', ident, '--episode', key])})
+        events = review_events(root, value['selected'].get('preference_events', {}), journal=journal)
     result = {'snapshot_id': ident, 'reports': list(value['selected']['reports']), 'observations': [row for row in observations if row['id'] in value['selected']['observations']],
             'source_boundary': boundary, 'episodes': episodes,
-            'preference_events': [row for row in trial_state(root)['events'] if row['id'] in value['selected'].get('preference_events',{})], 'remaining': value['remaining']}
+            'preference_boundary': '人格事件是历史变更记录，不是用户事实或独立新经历。source_state=verified 仅说明所绑定的当前来源仍相符，不证明当时理解正确。其他事件只保留元数据，不从旧文本补全；当前试行与纠正优先。',
+            'preference_events': events, 'remaining': value['remaining']}
     # Build the entire payload before saving retrieval coverage. This does not
     # claim the model understood the text. Commit rechecks all source versions.
-    write(root / f'data/automation/reviews/{ident}.json', {**value, 'delivered_episodes': delivered})
+    write(root / f'data/automation/reviews/{ident}.json', {**value, 'delivered_episodes': delivered,
+          'delivered_preference_events': {row['id']: event_fingerprint(row) for row in events}})
     return result
 
 
@@ -278,6 +281,11 @@ def commit(root, ident, report):
         raise ValueError('整理期间来源发生变化，请取得新快照后重试；游标未推进。')
     if any(value.get('delivered_episodes', {}).get(key) != version for key, version in value['selected']['episodes'].items()):
         raise ValueError('本批仍有未取出完整当前来源的对话，请读取 review 中 read_required 的项目；游标未推进。')
+    if value['selected'].get('preference_events'):
+        from personality import review_events, event_fingerprint
+        events = review_events(root, value['selected']['preference_events'])
+        if any(value.get('delivered_preference_events', {}).get(row['id']) != event_fingerprint(row) for row in events):
+            raise ValueError('人格事件的当前来源视图未返回或已变化，请重新读取同一 review 后核对报告；游标未推进。')
     next_cursor = dict(cursor)
     for kind, rows in value['selected'].items():
         next_cursor[kind] = {**cursor.get(kind, {}), **rows}

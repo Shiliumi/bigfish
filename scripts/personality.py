@@ -157,10 +157,45 @@ def resolve_evidence(root, ids, now=None, journal=None, strict=True):
     return result
 
 
-def trial_event(state, trial, action, reason, now):
+def event_fingerprint(value):
+    return hashlib.sha256(json.dumps(value, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
+
+
+def trial_event(state, trial, action, reason, now, evidence=()):
     item = {'trial_id': trial['id'], 'revision': trial['revision'], 'action': action, 'text': trial['text'], 'reason': reason, 'at': now.isoformat()}
+    item.update(evidence_version=1, evidence=[{k: source[k] for k in ('id', 'fingerprint')} for source in evidence])
     item['id'] = 'pref-' + hashlib.sha256(json.dumps(item, sort_keys=True, ensure_ascii=False).encode()).hexdigest()[:24]
     state['events'].append(item)
+
+
+def review_events(root, selected, now=None, journal=None):
+    """Source-checked historical event views; never restore wording from an unbound event."""
+    now = now or datetime.now(timezone.utc)
+    rows = [row for row in trial_state(root)['events'] if row['id'] in selected]
+    if len(rows) != len(selected) or {row['id'] for row in rows} != set(selected) or any(event_fingerprint(row) != selected[row['id']] for row in rows):
+        raise ValueError('本批人格事件已变化，请取得新快照；未返回旧内容。')
+    result = []
+    for row in rows:
+        item = {k: row[k] for k in ('id', 'trial_id', 'revision', 'action', 'at')}
+        proofs = row.get('evidence'); status = 'unbound'
+        if type(row.get('evidence_version')) is int and row['evidence_version'] == 1 and isinstance(proofs, list) and 1 <= len(proofs) <= 12:
+            status = 'unavailable'
+            try:
+                ids = [proof['id'] for proof in proofs]
+                if len(set(ids)) != len(ids) or any(not isinstance(proof['fingerprint'], str) or not re.fullmatch(r'[a-f0-9]{64}', proof['fingerprint']) for proof in proofs):
+                    raise ValueError('Invalid event source proof.')
+                current = {source['id']: source for source in resolve_evidence(root, ids, now, journal, strict=False)}
+                if timestamp(row['at']) <= now and all(ident in current and proof['fingerprint'] == current[ident]['fingerprint'] for ident, proof in zip(ids, proofs)):
+                    status = 'verified'
+            except (ValueError, TypeError, KeyError):
+                pass
+        item['source_state'] = status
+        if status == 'verified':
+            item.update(text=row['text'], reason=row['reason'])
+        else:
+            item['note'] = '仅保留历史变更编号和动作，缺少可核对的当前来源版本，不从旧事件恢复措辞或理由。'
+        result.append(item)
+    return result
 
 
 def trial_reason(root, value):
@@ -201,7 +236,7 @@ def propose_trial(root, proposal, now=None):
              'created_at': now.isoformat(), 'updated_at': now.isoformat(), 'expires_at': (now+timedelta(days=21)).isoformat(),
              'signals': [{**item, 'outcome': 'interested', 'reason': reason, 'at': now.isoformat()} for item in evidence]}
     state['trials'] = [item for item in state['trials'] if item['id'] != ident] + [trial]
-    trial_event(state, trial, 'started', reason, now)
+    trial_event(state, trial, 'started', reason, now, evidence)
     save_trials(root, state)
     return trial
 
@@ -222,7 +257,7 @@ def trial_feedback(root, proposal, now=None):
     evidence = resolve_evidence(root, proposal.get('evidence_ids'), now)
     if outcome == 'blocked':
         trial.update(revision=trial['revision']+1,updated_at=now.isoformat())
-        trial_event(state,trial,outcome,reason,now)
+        trial_event(state,trial,outcome,reason,now,evidence)
         save_trials(root,state)
         return trial
     known = {item['id']: item for item in trial['signals']}
@@ -238,7 +273,7 @@ def trial_feedback(root, proposal, now=None):
     trial.update(signals=list(known.values()), revision=trial['revision']+1, updated_at=now.isoformat())
     if outcome in ('followed', 'enjoyed'):
         trial['expires_at'] = (now+timedelta(days=21)).isoformat()
-    trial_event(state, trial, outcome, reason, now)
+    trial_event(state, trial, outcome, reason, now, evidence)
     save_trials(root, state)
     return trial
 
@@ -319,6 +354,27 @@ def preference_context(root, query, now=None, journal=None, for_browsing=False, 
         if len(candidates)>=6:
             break
     return candidates
+
+
+def trial_review(root, now=None):
+    """Automatic CLI review, distinct from the full human-facing history API."""
+    now = now or datetime.now(timezone.utc)
+    snapshot = preference_snapshot(root, now)
+    events = trial_state(root)['events']
+    latest = {row['trial_id']: row for row in events}
+    needed = {row['id'] for row in snapshot['history']} | {latest[row['id']]['id'] for row in snapshot['trials'] if row['id'] in latest}
+    views = {row['id']: row for row in review_events(root, {row['id']: event_fingerprint(row) for row in events if row['id'] in needed}, now)}
+    for row in snapshot['trials']:
+        event = latest.get(row['id'], {})
+        if not row['has_current_support']:
+            row.pop('text', None)
+            row['note'] = '当前没有有效支持，仅核对状态；不从旧试行或历史事件恢复内容。'
+        if not row['has_current_support'] or views.get(event.get('id'), {}).get('source_state') != 'verified':
+            row.pop('last_reason', None)
+    snapshot['history'] = [views[row['id']] for row in snapshot['history']]
+    snapshot['legacy_traits'] = [{'id': row['id'], 'note': '旧版倾向未绑定事件版本，保留档案，不从历史措辞重建。'} for row in snapshot['legacy_traits']]
+    snapshot['source_boundary'] = '这是当前试行与经过来源核对的历史变更，不是用户事实或独立新经历。缺少当前支持的条目不补全旧措辞；人工档案与界面历史仍保留，未自动改写 SOUL。'
+    return snapshot
 
 
 def validate_promotion(root, change, now):
@@ -423,7 +479,7 @@ def main():
             if args.action == 'status':
                 result = {'observations':observations(ROOT), 'profile':load(ROOT/'data/personality/profile.json',{'traits':[]}), 'preferences':preference_snapshot(ROOT)}
             elif args.action == 'trials':
-                result = preference_snapshot(ROOT)
+                result = trial_review(ROOT)
             elif args.action == 'api':
                 import sys
                 data = json.load(sys.stdin)
@@ -434,6 +490,11 @@ def main():
                 data = load(Path(args.file),None)
                 operation = {'record':record, 'apply':apply, 'trial':propose_trial, 'feedback':trial_feedback, 'retire':retire_trial}[args.action]
                 result = operation(ROOT,data)
+                if args.action in ('trial','feedback'):
+                    result = {'ok': True, **{k: result[k] for k in ('id','kind','status','revision')},
+                              **({'already_recorded': True} if result.get('already_recorded') else {})}
+                elif args.action == 'apply':
+                    result = {'ok': True, 'revision': result['revision'], 'updated_ids': [row['id'] for row in data['traits']]}
         print(json.dumps(result,ensure_ascii=False,indent=2))
     except (ValueError, OSError, KeyError, TypeError) as error:
         if args.action == 'api':
