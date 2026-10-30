@@ -144,6 +144,25 @@ class MemoryPromptUpgradeTest(unittest.TestCase):
             store = Store(self.rows); store.before_apply = change
             with self.assertRaises(ValueError): upgrade.apply_update(store)
             self.assertFalse(store.saved)
+    def stock_completion(self, entry=None):
+        return '\n'.join([upgrade.INTRO, entry or upgrade.NEW_STEP, '2. 自定义核心记忆步骤。', upgrade.OLD_VERIFY, '4. 自定义报告说明。', upgrade.OLD_FINISH])+'\n'
+    def test_stock_completion_moves_checks_before_commit_without_resetting_other_steps(self):
+        prompt=self.stock_completion();self.rows[0]['prompt']=prompt;store=Store(self.rows)
+        self.assertTrue(upgrade.apply_update(store)['updated']);updated=store.rows[0]['prompt']
+        self.assertEqual([i for i,(a,b)in enumerate(zip(prompt.splitlines(),updated.splitlines()))if a!=b],[3,5])
+        self.assertEqual(store.rows[0],{**self.rows[0],'prompt':updated});self.assertEqual(store.rows[1:],self.rows[1:])
+        self.assertIn(upgrade.NEW_VERIFY,updated);self.assertIn(upgrade.NEW_FINISH,updated)
+        self.assertFalse(upgrade.apply_update(store)['updated'])
+    def test_custom_or_quoted_completion_pair_is_preserved(self):
+        for prompt in [self.stock_completion().replace(upgrade.OLD_VERIFY,'3. 用户自定义核对方式。'),
+                       self.stock_completion().replace(upgrade.OLD_FINISH,'5. 用户自定义收尾方式。'),
+                       self.stock_completion()+'```\n'+upgrade.OLD_FINISH+'\n```\n']:
+            with self.subTest(prompt=prompt):self.assertEqual(upgrade.upgrade_prompt(prompt),prompt)
+    def test_completion_upgrade_handles_crlf_old_source_step_and_partial_reentry(self):
+        oldest=self.stock_completion(upgrade.OLD_STEP);updated=upgrade.upgrade_prompt(oldest)
+        self.assertEqual(upgrade.upgrade_prompt(oldest.replace('\n','\r\n')),updated.replace('\n','\r\n'))
+        partial=self.stock_completion().replace(upgrade.OLD_VERIFY,upgrade.NEW_VERIFY)
+        self.assertEqual(upgrade.upgrade_prompt(partial),updated)
 
 
 if __name__ == '__main__': unittest.main()

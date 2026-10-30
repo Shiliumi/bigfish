@@ -61,4 +61,4 @@ python3 scripts/install_memory_review_sources.py --dry-run
 python3 scripts/install_memory_review_sources.py
 ```
 
-迁移器使用本项目 Hermes 的原生任务锁与保存接口，先备份 jobs.json，仅替换匹配已知开场和第一步的 fish-memory 提示。自定义入口、重复名称或并发修改会保留或中止，不重建任务，不改日程、模型、工具集、其他步骤或学习搭子。下一次夜间任务启动时会读取新版；不要为这个更新运行 setup_jobs.py。
+来源入口的迁移使用本项目 Hermes 的原生任务锁与保存接口，先备份 jobs.json，只替换匹配已知开场和第一步的来源说明。2026-10-31 起，同一迁移器还支持成对更新已知的第 3、5 步，见 [核对与收尾协议](memory-finish.md)。自定义内容、重复名称或并发修改会保留或中止，不重建任务，不改日程、模型、工具集或学习搭子。下一次夜间任务启动时会读取新版；不要为这个更新运行 setup_jobs.py。
