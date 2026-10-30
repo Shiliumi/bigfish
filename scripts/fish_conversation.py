@@ -142,6 +142,11 @@ def turn_mode(query,journal,session_id,now=None):
     return mode
 
 
+def resolve_mode(query,journal,session_id='',now=None):
+    try:return turn_mode(query,journal,session_id,now)
+    except (ValueError,TypeError,OSError):return classify(query)
+
+
 def public_url(value):
     import ipaddress
     if not isinstance(value,str)or len(value)>2000:return False
@@ -254,9 +259,8 @@ def recent_voice(journal,session_id,now=None):
     return hints[:3]
 
 
-def context(root,query,*,journal,session_id='',tokenize=None,now=None,include_interest=True,sanitize=None,feedback=None):
-    try:mode=turn_mode(query,journal,session_id,now)
-    except (ValueError,TypeError,OSError):mode=classify(query)
+def context(root,query,*,journal,session_id='',tokenize=None,now=None,include_interest=True,sanitize=None,feedback=None,mode=None):
+    if mode is None:mode=resolve_mode(query,journal,session_id,now)
     packet={'mode':mode,'hint':HINTS[mode]}
     feedback=recent_feedback(journal,session_id,query,now)if feedback is None else feedback
     if feedback and mode!='feedback':packet['recent_feedback']=[STYLE_HINTS[kind]for kind in feedback]

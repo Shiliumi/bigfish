@@ -90,7 +90,7 @@ class TrialSourceTest(unittest.TestCase):
         with Journal(self.root, now=self.now+timedelta(days=1)) as journal: self.assertEqual(journal.get(row['id'])['status'], 'deleted')
     def test_unavailable_trial_warning_survives_style_opt_out_without_old_text(self):
         _, row = self.start(); self.forget(row)
-        for mode in ('focused', 'gentle', 'feedback'):
+        for mode in ('focused', 'gentle', 'feedback', 'playful', 'personal'):
             with self.subTest(mode=mode):
                 packet = self.context(style_mode=mode, allow_expression=False)
                 self.assertEqual(packet[0]['stage'], 'reconsidering'); self.assertNotIn(self.text, json.dumps(packet, ensure_ascii=False))

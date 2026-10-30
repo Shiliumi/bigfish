@@ -107,7 +107,14 @@ class PreferenceTest(unittest.TestCase):
         trial=self.follow(trial,1);trial=self.follow(trial,2)
         growth.apply(self.root,self.proposal(trial),self.now+timedelta(days=3))
         growth.retire_trial(self.root,{'id':trial['id'],'revision':trial['revision']},self.now+timedelta(days=4))
-        context=growth.preference_context(self.root,'随便聊聊',now=self.now+timedelta(days=4),allow_expression=False)
-        self.assertEqual(context[0]['stage'],'retired')
+        for mode in (None,'playful','personal'):
+            context=growth.preference_context(self.root,'随便聊聊',now=self.now+timedelta(days=4),allow_expression=False,style_mode=mode)
+            self.assertEqual(context[0]['stage'],'retired')
+
+    def test_playful_and_personal_defer_optional_trials_but_normal_context_keeps_them(self):
+        trial=self.start()
+        for mode in ('playful','personal'):
+            with self.subTest(mode=mode):self.assertEqual(growth.preference_context(self.root,'积木厨房',now=self.now,style_mode=mode),[])
+        self.assertEqual(growth.preference_context(self.root,'积木厨房',now=self.now)[0]['id'],trial['id'])
 
 if __name__=='__main__':unittest.main()

@@ -39,9 +39,24 @@ const conversations = {
   before: execFileSync('git', ['show', base + ':scripts/fish_conversation.py'], { cwd: root, encoding: 'utf8' }),
   after: await readFile(new URL('../scripts/fish_conversation.py', import.meta.url), 'utf8'),
 };
+let prefetch = null;
+if (fixture.trials) {
+  prefetch = {};
+  for (const variant of ['before', 'after']) {
+    const files = await Promise.all([
+      ['provider', 'plugins/fish-episodes/__init__.py'], ['conversation', 'scripts/fish_conversation.py'],
+      ['growth', 'scripts/personality.py'], ['journal', 'scripts/fish_journal.py'], ['matters', 'scripts/fish_matters.py'],
+    ].map(async ([key, path]) => [key, variant === 'before'
+      ? execFileSync('git', ['show', base + ':' + path], { cwd: root, encoding: 'utf8' })
+      : await readFile(new URL('../' + path, import.meta.url), 'utf8')]));
+    prefetch[variant] = Object.fromEntries(files);
+  }
+}
 function localContext(cases, plugins = {}, sources = conversations) {
   return JSON.parse(execFileSync('python3', ['scripts/conversation_probe_context.py'], {
-    cwd: root, input: JSON.stringify({ plugins, conversations: sources, cases }), encoding: 'utf8',
+    cwd: root, input: JSON.stringify({ plugins, conversations: sources, cases, ...(prefetch ? {
+      prefetch: Object.fromEntries(Object.keys(sources).map(key => [key, prefetch[key]])), trials: fixture.trials,
+    } : {}) }), encoding: 'utf8',
   }));
 }
 const local = localContext(interactive ? [] : fixture.cases, { before: pluginBefore, after: pluginAfter });
@@ -57,6 +72,7 @@ const report = { baseline: base, model: connection.model, settings, scope: fixtu
   comparison: interactive && fixture.candidate ? 'baseline versus experimental candidate; not an installed persona change' : 'baseline versus public working tree',
   candidateParagraph: interactive ? fixture.candidate?.paragraph : undefined,
   hashes: { fixture: hash(fixtureText), beforeSoul: hash(before), afterSoul: hash(after), beforeProvider: hash(pluginBefore), afterProvider: hash(pluginAfter), beforeConversation: hash(conversations.before), afterConversation: hash(conversations.after) }, records: [] };
+if (prefetch) report.hashes.prefetch = Object.fromEntries(Object.entries(prefetch).map(([variant, sources]) => [variant, hash(JSON.stringify(sources))]));
 
 function ledger(data) {
   const result = spawnSync('python3', ['-c', `import sys,json;from pathlib import Path;sys.path.insert(0,str(Path.cwd()/'scripts'));from fish_budget import Budget

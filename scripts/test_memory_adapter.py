@@ -72,6 +72,29 @@ class AdapterTest(unittest.TestCase):
         packet=self.provider.prefetch('随便说一句。')
         self.assertNotIn(text,packet);self.assertIn('"stage": "reconsidering"',packet);self.assertIn('先暂停',packet)
 
+    def test_playful_personal_and_callback_share_mode_before_trial_selection(self):
+        from datetime import datetime,timezone,timedelta
+        now=datetime.now(timezone.utc);self.initialize();text='评价作品时，我似乎更愿意先列出可核对参数，再给结论。'
+        with Journal(self.root,now=now)as journal:
+            row=journal.capture('fiction-seed','一起看键盘规格。','先核对参数，再评价做法。')
+            journal.capture('chat-new','你今天有种微波炉土豆的气质。','烫嘴是吧。',recorded_at=(now-timedelta(minutes=1)).isoformat())
+        self.provider.growth.propose_trial(self.root,{'id':'careful-review','kind':'expression','text':text,'reason':'这次规格核对让我确实想试试这种评价方式。','evidence_ids':[row['id']]},now)
+        for query,mode in [('你是不是很方啊？','personal'),('看把你得意的。','playful'),('那就叫你薯熟吧。','playful')]:
+            with self.subTest(query=query),patch.object(self.provider.conversation,'resolve_mode',wraps=self.provider.conversation.resolve_mode)as choose:
+                packet=self.provider.prefetch(query);self.assertIn('"mode":"'+mode+'"',packet);self.assertNotIn(text,packet);self.assertEqual(choose.call_count,1)
+        self.assertIn(text,self.provider.prefetch('平常你怎么看小工具。'))
+        self.assertIn(text,self.provider.prefetch('那就叫你薯熟吧。',session_id='another-conversation'))
+
+    def test_budget_fallback_reuses_the_same_resolved_mode(self):
+        self.initialize();oversized='引用来源\n'+json.dumps([{'id':'fiction-large','excerpt':'甲'*3500}],ensure_ascii=False)
+        with patch.object(self.provider,'_recall',return_value=oversized),patch.object(self.provider,'matters')as matters:
+            matters.return_value.context.return_value='乙'*4200
+            with patch.object(self.provider.conversation,'resolve_mode',wraps=self.provider.conversation.resolve_mode)as choose,patch.object(self.provider.conversation,'context',wraps=self.provider.conversation.context)as context:
+                packet=self.provider.prefetch('你是不是很方啊？')
+                self.assertEqual(choose.call_count,1);self.assertEqual(context.call_count,2)
+                self.assertTrue(all(call.kwargs['mode']=='personal'for call in context.call_args_list))
+                self.assertIn('"mode":"personal"',packet);self.assertNotIn('fiction-large',packet)
+
     def test_optional_semantic_route_is_bound_and_keeps_existing_tool_names(self):
         before=list(sys.path);self.initialize();self.assertEqual(sys.path,before)
         self.assertEqual(self.provider.semantic.root,self.root.resolve())

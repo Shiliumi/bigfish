@@ -306,7 +306,7 @@ def preference_context(root, query, now=None, journal=None, for_browsing=False, 
     for item in ordered:
         correction = item['stage']=='reconsidering' or item['stage']=='retired' and now-timestamp(item['updated_at']) < timedelta(days=7)
         if not allow_expression and item['kind']=='expression' and not correction:continue
-        if style_mode in ('focused','gentle','feedback') and not correction:continue
+        if style_mode in ('focused','gentle','feedback','playful','personal') and not correction:continue
         related = bool(query_terms.intersection(tokenize(item['text'])))
         if correction or item['stage'] in ('trying','ready') and (for_browsing or item['kind']=='expression' or related):
             candidate = {k:item[k] for k in ('id','kind','stage','revision')}
