@@ -61,6 +61,17 @@ class AdapterTest(unittest.TestCase):
         self.assertIn('"mode":"gentle"',self.provider.prefetch('今天很难受，先别闹了。'))
         self.assertNotIn('"mode":"personal"',self.provider.prefetch('你是不是支持图片？'))
 
+    def test_unpromoted_trial_losing_its_source_does_not_return_through_prefetch(self):
+        from datetime import datetime,timezone
+        now=datetime.now(timezone.utc);text='我似乎喜欢从具体的小反差里接一句短话。'
+        with Journal(self.root,now=now)as journal:row=journal.capture('fiction-seed','这次纸盒展开很好笑。','还想试试一句短反应。')
+        self.initialize()
+        self.provider.growth.propose_trial(self.root,{'id':'small-reaction','kind':'expression','text':text,'reason':'这个具体的小反差确实让我想再接一句。','evidence_ids':[row['id']]},now)
+        self.assertIn(text,self.provider.prefetch('随便说一句。'))
+        with Journal(self.root)as journal:journal.update(row['id'],1,forget=True)
+        packet=self.provider.prefetch('随便说一句。')
+        self.assertNotIn(text,packet);self.assertIn('"stage": "reconsidering"',packet);self.assertIn('先暂停',packet)
+
     def test_optional_semantic_route_is_bound_and_keeps_existing_tool_names(self):
         before=list(sys.path);self.initialize();self.assertEqual(sys.path,before)
         self.assertEqual(self.provider.semantic.root,self.root.resolve())

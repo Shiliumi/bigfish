@@ -4,7 +4,7 @@ import {api} from './api'
 import './learning.css'
 interface Trial {id:string;text:string;kind:string;stage:string;revision:number;created_at:string;updated_at:string;expires_at:string;last_reason:string;needs_review:boolean;evidence:{id:string;source_ref:string;seen_at:string;outcome:string}[]}
 interface Preferences {trials:Trial[];history:{id:string;trial_id:string;text:string;action:string;reason:string;at:string}[];legacy_traits:{id:string;text:string}[]}
-const stage=(key:string)=>({trying:'还在试着喜欢',ready:'值得回看一下',stable:'慢慢留下来了',reconsidering:'有新反例，重新想想',faded:'自然淡下去了',retired:'已经放下'}[key]||key)
+const stage=(key:string)=>({trying:'还在试着喜欢',ready:'值得回看一下',stable:'慢慢留下来了',reconsidering:'先重新核对一下',faded:'自然淡下去了',retired:'已经放下'}[key]||key)
 function external(value:string){try{const u=new URL(value);return ['http:','https:'].includes(u.protocol)&&!u.username&&!u.password?u.href:null}catch{return null}}
 export default function PreferencePanel(){
  const [data,setData]=useState<Preferences|null>(null),[error,setError]=useState(''),[loading,setLoading]=useState(false),[busy,setBusy]=useState('');const sequence=useRef(0)

@@ -256,7 +256,7 @@ def trial_assessment(root, trial, now, journal=None):
     clear = not last_negative or bool(last_positive and last_positive > last_negative and now-last_negative >= timedelta(days=3))
     followup = any(item['outcome'] in ('followed','enjoyed') and timestamp(item['seen_at']) > timestamp(trial['created_at']) for item in positives)
     ready = trial['status'] == 'trying' and timestamp(trial['expires_at']) > now and now-timestamp(trial['created_at']) >= timedelta(days=3) and len(groups)>=3 and len(dates)>=2 and clear and followup
-    return {'positive_ids': [item['id'] for item in positives], 'valid': valid, 'ready': ready, 'needs_review': not clear}
+    return {'positive_ids': [item['id'] for item in positives], 'valid': valid, 'ready': ready, 'needs_review': not clear or not positives}
 
 
 def preference_snapshot(root, now=None, journal=None):
@@ -280,6 +280,8 @@ def preference_snapshot(root, now=None, journal=None):
             stage = 'reconsidering' if assessment['needs_review'] else 'stable'
         elif timestamp(trial['expires_at']) <= now:
             stage = 'faded'
+        elif assessment['needs_review']:
+            stage = 'reconsidering'
         elif assessment['ready']:
             stage = 'ready'
         else:
@@ -287,7 +289,8 @@ def preference_snapshot(root, now=None, journal=None):
         rows.append({k: trial[k] for k in ('id','text','kind','revision','created_at','updated_at','expires_at')} | {'stage': stage,
             'formed_at': stable.get(trial['id'],{}).get('formed_at'),
             'evidence': [{'id': item['id'], 'source_ref': item['source_ref'], 'seen_at': item['seen_at'], 'outcome': item['outcome']} for item in assessment['valid']],
-            'needs_review': assessment['needs_review'], 'last_reason': next((event['reason'] for event in reversed(state['events']) if event['trial_id']==trial['id']), '')})
+            'needs_review': assessment['needs_review'], 'has_current_support': bool(assessment['positive_ids']),
+            'last_reason': next((event['reason'] for event in reversed(state['events']) if event['trial_id']==trial['id']), '')})
     return {'trials': rows, 'history': state['events'][-12:][::-1], 'profile_revision': profile.get('revision',0), 'legacy_traits': [item for item in profile.get('traits',[]) if not item.get('trial_id')]}
 
 
@@ -306,7 +309,13 @@ def preference_context(root, query, now=None, journal=None, for_browsing=False, 
         if style_mode in ('focused','gentle','feedback') and not correction:continue
         related = bool(query_terms.intersection(tokenize(item['text'])))
         if correction or item['stage'] in ('trying','ready') and (for_browsing or item['kind']=='expression' or related):
-            candidates.append({'id':item['id'],'text':item['text'],'kind':item['kind'],'stage':item['stage'],'revision':item['revision']})
+            candidate = {k:item[k] for k in ('id','kind','stage','revision')}
+            if item['stage']=='reconsidering' and not item['formed_at'] and not item['has_current_support']:
+                # Do not reintroduce an unsupported trial's old wording through its warning.
+                candidate['note']='这项未晋升试行缺少当前有效的支持，先暂停，不从旧来源恢复或补全其内容；有新的实际经历再核对。'
+            else:
+                candidate['text']=item['text']
+            candidates.append(candidate)
         if len(candidates)>=6:
             break
     return candidates
