@@ -119,7 +119,7 @@ class FishEpisodes(MemoryProvider):
                     if self.matters:
                         self.matters(journal,self.tokenize).bind_episode(session_id or self.session_id,user_content,episode)
                 if self.conversation:
-                    try:self.conversation.note_chat_links(self.root,assistant_content)
+                    try:self.conversation.note_chat_links(self.root,assistant_content,session_id=session_id or self.session_id)
                     except Exception:pass
         finally:
             # The manager syncs asynchronously: an older completed turn must not clear a newer one.

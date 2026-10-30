@@ -61,6 +61,24 @@ class AdapterTest(unittest.TestCase):
         self.assertIn('"mode":"gentle"',self.provider.prefetch('今天很难受，先别闹了。'))
         self.assertNotIn('"mode":"personal"',self.provider.prefetch('你是不是支持图片？'))
 
+    def test_synced_interest_link_is_bound_to_the_actual_conversation(self):
+        from datetime import datetime,timezone,timedelta
+        now=datetime.now(timezone.utc);self.initialize()
+        source=Path(__file__).resolve().parents[1]
+        shutil.copy2(source/'scripts/curiosity.py',self.root/'scripts/curiosity.py')
+        url='https://example.org/paper-gears';report='reports/2026-10-31/1200-surf.md';ident='cur-123456789abc'
+        path=self.root/report;path.parent.mkdir(parents=True);path.write_text(url)
+        (self.root/'data/personality').mkdir(parents=True,exist_ok=True)
+        (self.root/'data/personality/observations.jsonl').write_text(json.dumps({'id':'obs-fiction','url':url,'seen_at':now.isoformat(),'report_path':report,'read_depth':'body','observation':'实际读到了纸齿轮的结构。'})+'\n')
+        (self.root/'data/surf-state.json').write_text(json.dumps({'visited':[{'url':url,'report':report,'read_at':now.isoformat()}]}))
+        path=self.root/'data/curiosity/state.json';path.parent.mkdir(parents=True)
+        path.write_text(json.dumps({'threads':[{'id':ident,'question':'纸齿轮怎样保持啮合？','why':'想继续看纸片的连接处。','status':'open','expires_at':(now+timedelta(days=7)).isoformat(),'evidence_ids':['obs-fiction'],'source_urls':[url]}]}))
+        self.provider.on_turn_start(1,'刚才说到的那个作品。')
+        self.provider.sync_turn('刚才说到的那个作品。','[纸齿轮]('+url+')',session_id='actual-conversation')
+        self.assertIn(ident,self.provider.prefetch('上次那个后来怎么样了？',session_id='actual-conversation'))
+        unresolved=self.provider.prefetch('上次那个后来怎么样了？',session_id='different-conversation')
+        self.assertNotIn(ident,unresolved);self.assertIn('followup_boundary',unresolved)
+
     def test_unpromoted_trial_losing_its_source_does_not_return_through_prefetch(self):
         from datetime import datetime,timezone
         now=datetime.now(timezone.utc);text='我似乎喜欢从具体的小反差里接一句短话。'
