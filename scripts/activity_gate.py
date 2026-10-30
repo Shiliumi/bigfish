@@ -18,6 +18,7 @@ TZ = ZoneInfo('Asia/Shanghai')
 BATCH = 12
 EPISODE_INLINE_CHARS = 6000
 SOURCE_PART_CHARS = 250
+SOURCE_KINDS = ('reports', 'observations', 'episodes', 'preference_events')
 
 
 def read(path, default):
@@ -44,6 +45,65 @@ def lock(root):
 
 def checksum(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def selection_id(selected):
+    return hashlib.sha256(json.dumps(selected, sort_keys=True).encode()).hexdigest()
+
+
+def pending_checkpoint(cursor):
+    if '_pending_commit' not in cursor: return None
+    receipt = cursor['_pending_commit']
+    value = receipt.get('snapshot') if isinstance(receipt, dict) else None
+    if not isinstance(value, dict) or receipt.get('version') != 1:
+        raise ValueError('整理完成凭据无法核对，保留现场。')
+    selected = value.get('selected'); ident = value.get('id')
+    if not isinstance(selected, dict) or set(selected) != set(SOURCE_KINDS) or not all(isinstance(rows, dict) for rows in selected.values()) or not isinstance(ident, str) or not re.fullmatch(r'[a-f0-9]{64}', ident) or selection_id(selected) != ident:
+        raise ValueError('整理完成凭据与来源清单不符，保留现场。')
+    if any(not isinstance(cursor.get(kind), dict) or any(cursor[kind].get(key) != version for key, version in rows.items()) for kind, rows in selected.items()):
+        raise ValueError('整理完成凭据与已保存游标不符，保留现场。')
+    at = datetime.fromisoformat(value['committed_at'])
+    report = value['checkpoint_report']
+    if at.tzinfo is None or not isinstance(report, dict) or not re.fullmatch(r'reports/\d{4}-\d{2}-\d{2}/memory-review-[a-f0-9]{12}\.md', report.get('path', '')) or not re.fullmatch(r'[a-f0-9]{64}', report.get('sha256', '')):
+        raise ValueError('整理完成凭据缺少有效时间或报告指纹，保留现场。')
+    return value
+
+
+def finish_checkpoint(root, cursor):
+    value = pending_checkpoint(cursor)
+    ident = value['id']; target = root / f'data/automation/reviews/{ident}.json'
+    existing = read(target, None)
+    if existing is not None and (existing.get('id') != ident or existing.get('selected') != value['selected'] or existing.get('committed_at') not in (None, value['committed_at'])):
+        raise ValueError('整理快照与完成凭据冲突，未覆盖。')
+    updated = {**(existing or {}), **value}
+    if updated != existing: write(target, updated)
+    gates = read(root / 'data/automation/gates.json', {})
+    if gates.get('memory', {}).get('context', {}).get('snapshot_id') == ident and gates['memory'].get('lease_until') is not None:
+        gates['memory'].update(lease_until=None, reason='本批增量整理已保存。')
+        write(root / 'data/automation/gates.json', gates)
+    # Clear only this receipt, preserving any unrelated cursor metadata. CLI callers
+    # hold the existing cross-process lock throughout publication and recovery.
+    current = read(root / 'data/automation/review-cursor.json', {})
+    if '_pending_commit' in current:
+        if current['_pending_commit'] != cursor['_pending_commit']:
+            raise ValueError('整理完成凭据刚被修改，未覆盖。')
+        pending_checkpoint(current)
+        current.pop('_pending_commit')
+        write(root / 'data/automation/review-cursor.json', current)
+
+
+def recover_checkpoint(root, persist=True):
+    try:
+        cursor = read(root / 'data/automation/review-cursor.json', {})
+        if '_pending_commit' not in cursor: return {'pending': False, 'recovered': False}
+        pending_checkpoint(cursor)
+        if not persist: return {'pending': True, 'recovered': False}
+        finish_checkpoint(root, cursor)
+        return {'pending': False, 'recovered': True}
+    except Exception:
+        # A published cursor is the commit point. Never report rollback merely
+        # because its derived snapshot, lease or receipt cleanup is unavailable.
+        return {'pending': True, 'recovered': False}
 
 
 def inventory(root):
@@ -76,7 +136,7 @@ def pending(root):
     selected = {kind: dict(list((key, value) for key, value in rows.items() if cursor.get(kind, {}).get(key) != value)[:BATCH]) for kind, rows in current.items()}
     if not any(selected.values()):
         return None
-    ident = hashlib.sha256(json.dumps(selected, sort_keys=True).encode()).hexdigest()
+    ident = selection_id(selected)
     return {'id': ident, 'selected': selected, 'remaining': {kind: sum(cursor.get(kind, {}).get(key) != value for key, value in rows.items()) for kind, rows in current.items()}}
 
 
@@ -86,9 +146,15 @@ def evaluate(root, mode, now=None, persist=True):
     state = read(state_path, {})
     decision = {'wakeAgent': False, 'reason': '', 'checked_at': now.isoformat()}
     settings = curiosity.activity_settings(root)
+    recovery = recover_checkpoint(root, persist) if mode == 'memory' and not settings['paused'] else None
+    if recovery and recovery['recovered']:
+        state = read(state_path, {})
+    if recovery and (recovery['pending'] or recovery['recovered']): decision['maintenance'] = recovery
     previous = state.get(mode, {})
     if settings['paused']:
         decision['reason'] = '后台省粮暂停中，聊天仍可使用。'
+    elif recovery and recovery['pending']:
+        decision.update(reason='上批整理状态待核对，本次只尝试本地恢复，不调用模型。', error=True)
     elif previous.get('lease_until') and datetime.fromisoformat(previous['lease_until']) > now:
         decision['reason'] = '本轮机会已唤醒，等待完成或租约到期。'
     elif mode == 'surf':
@@ -114,6 +180,10 @@ def evaluate(root, mode, now=None, persist=True):
             decision.update(wakeAgent=False,reason='今日后台鱼粮不足以再出发，等明天或调整额度；聊天仍可使用。')
     if persist:
         decision['lease_until'] = (now + timedelta(minutes=20)).isoformat() if decision['wakeAgent'] else previous.get('lease_until')
+        if mode == 'memory' and not decision['wakeAgent'] and decision['lease_until'] and 'context' in previous:
+            # A skipped tick still belongs to the prior lease. Retain its identity
+            # so a later checkpoint recovery can release only that matching lease.
+            decision.setdefault('context', previous['context'])
         decision['skipped_ticks'] = previous.get('skipped_ticks', 0) + int(not decision['wakeAgent'])
         write(state_path, {**state, mode: decision})
     return decision
@@ -185,6 +255,14 @@ def review(root, ident, episode=None):
 
 
 def commit(root, ident, report):
+    cursor = read(root / 'data/automation/review-cursor.json', {})
+    previous = pending_checkpoint(cursor)
+    if previous is not None:
+        recovery = recover_checkpoint(root)
+        if previous['id'] == ident:
+            return {'ok': True, 'already_committed': True, 'cleanup_pending': recovery['pending']}
+        if recovery['pending']: raise ValueError('上批整理仍待本地收尾，本批尚未确认提交。')
+        cursor = read(root / 'data/automation/review-cursor.json', {})
     value = snapshot(root, ident)
     if value.get('committed_at'):
         return {'ok': True, 'already_committed': True}
@@ -192,25 +270,33 @@ def commit(root, ident, report):
     path = (root / candidate).resolve()
     if candidate.is_absolute() or not re.fullmatch(r'reports/\d{4}-\d{2}-\d{2}/memory-review-[a-f0-9]{12}\.md', report) or not path.is_relative_to((root / 'reports').resolve()) or not path.is_file():
         raise ValueError('请先保存带快照编号的记忆整理报告。')
-    if f'Review-Snapshot: {ident}' not in path.read_text():
+    raw_report = path.read_bytes()
+    if not any(line.strip() == f'Review-Snapshot: {ident}' for line in raw_report.decode('utf8').splitlines()):
         raise ValueError('整理报告未包含本次 Review-Snapshot 标记。')
     current = inventory(root)
     if any(current[kind].get(key) != version for kind, rows in value['selected'].items() for key, version in rows.items()):
         raise ValueError('整理期间来源发生变化，请取得新快照后重试；游标未推进。')
     if any(value.get('delivered_episodes', {}).get(key) != version for key, version in value['selected']['episodes'].items()):
         raise ValueError('本批仍有未取出完整当前来源的对话，请读取 review 中 read_required 的项目；游标未推进。')
-    cursor = read(root / 'data/automation/review-cursor.json', {})
+    next_cursor = dict(cursor)
     for kind, rows in value['selected'].items():
-        cursor[kind] = {**cursor.get(kind, {}), **rows}
-    cursor['updated_at'] = datetime.now(TZ).isoformat()
-    write(root / 'data/automation/review-cursor.json', cursor)
-    # Cursor first: a crash can repeat a checkpoint but cannot lose unprocessed sources.
-    write(root / f'data/automation/reviews/{ident}.json', {**value, 'committed_at': cursor['updated_at']})
-    gates = read(root / 'data/automation/gates.json', {})
-    if gates.get('memory', {}).get('context', {}).get('snapshot_id') == ident:
-        gates['memory'].update(lease_until=None, reason='本批增量整理已保存。')
-        write(root / 'data/automation/gates.json', gates)
-    return {'ok': True, 'counts': {k: len(v) for k, v in value['selected'].items()}}
+        next_cursor[kind] = {**cursor.get(kind, {}), **rows}
+    next_cursor['updated_at'] = datetime.now(TZ).isoformat()
+    completed = {**value, 'committed_at': next_cursor['updated_at'],
+                 'checkpoint_report': {'path': report, 'sha256': hashlib.sha256(raw_report).hexdigest()}}
+    receipt = {'version': 1, 'snapshot': completed}
+    next_cursor['_pending_commit'] = receipt
+    pending_checkpoint(next_cursor)  # Reject an inconsistent snapshot before publication.
+    try:
+        # Cursor and proof of completion are published together in one replacement.
+        write(root / 'data/automation/review-cursor.json', next_cursor)
+    except Exception:
+        # A write can publish and then report an error. Confirm the exact receipt;
+        # otherwise leave the result unconfirmed, without claiming an unchanged cursor.
+        visible = read(root / 'data/automation/review-cursor.json', {})
+        if visible.get('_pending_commit') != receipt: raise
+    recovery = recover_checkpoint(root)
+    return {'ok': True, 'counts': {k: len(v) for k, v in value['selected'].items()}, 'cleanup_pending': recovery['pending']}
 
 
 def main():
@@ -231,8 +317,11 @@ def main():
                 result = commit(ROOT, args.snapshot, args.report or '')
     except Exception:
         # The scheduler defaults to waking on script failure. Always emit a valid skip decision.
-        if args.command not in ('surf', 'memory'):
-            raise SystemExit('整理没有提交：请核对快照、来源状态和报告，游标保持原样。') from None
+        if args.command == 'commit':
+            print(json.dumps({'ok': False, 'commit_state': 'unconfirmed', 'error': '本批提交状态未能确认。请核对快照、来源和报告，必要时重试同一 commit；不要重复反馈或自行回滚游标。'}, ensure_ascii=False))
+            raise SystemExit(1) from None
+        if args.command == 'review':
+            raise SystemExit('来源未成功返回：请核对快照与当前来源状态。') from None
         result = {'wakeAgent': False, 'reason': '本地预检失败，本次已跳过模型调用；请检查后台设置与数据。', 'error': True}
         try:
             with lock(ROOT):
