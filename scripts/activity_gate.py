@@ -178,6 +178,15 @@ def evaluate(root, mode, now=None, persist=True):
         with Budget(root,now=now) as ledger: budget=ledger.snapshot()
         if budget['settings']['enabled'] and budget['remaining']<10_000:
             decision.update(wakeAgent=False,reason='今日后台鱼粮不足以再出发，等明天或调整额度；聊天仍可使用。')
+        elif mode=='surf':
+            from fish_budget import surf_admission
+            admission=surf_admission(root,budget,now)
+            if admission:
+                decision['admission']=admission
+                if not admission['allowed']:
+                    reason='剩余后台鱼粮不足以覆盖一次近期冲浪开销'
+                    if admission['later_memory_estimate']:reason+='并给今晚记忆整理留出余量'
+                    decision.update(wakeAgent=False,reason=reason+'，本次不唤醒；聊天仍可使用。')
     if persist:
         decision['lease_until'] = (now + timedelta(minutes=20)).isoformat() if decision['wakeAgent'] else previous.get('lease_until')
         if mode == 'memory' and not decision['wakeAgent'] and decision['lease_until'] and 'context' in previous:

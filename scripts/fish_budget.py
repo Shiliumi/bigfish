@@ -16,6 +16,65 @@ TZ = ZoneInfo('Asia/Shanghai')
 DEFAULT_LIMIT = 2_000_000
 OUTPUT_CAP = 8192
 BUCKETS = ('input_tokens','cache_read_tokens','cache_write_tokens','output_tokens')
+SURF_BROWSE_CALLS = 12
+SURF_NETWORK_TOOLS = frozenset(('browser_exec','web_search','web_extract'))
+SURF_CLOSEOUT = ('本轮公开浏览阶段已结束，现在只收好本轮结果，不再打开网页或经 terminal 另行联网。'
+    '根据已有真实工具结果，按已取得的 SURF_COMPLETE 协议用 write_file/patch 保存候选 JSON，'
+    '再运行 python3 scripts/surf_complete.py 实际候选路径。尚未出发则直接结束；'
+    '已经出发但没有读到正文就记录 blocked、空 pages/observations/threads，不补造发现、时间或分享。'
+    '必要时只读取本机已有协议或核对提交错误，成功回执后结束，不再扩展探索。'
+    '这只是收尾提醒，不表示结果已保存；总额度不足仍按原规则停止。')
+
+
+def surf_closeout(request,identity,context):
+    """Leave local tools available before the outing exhausts its model-call limit.
+
+    Native cron identity and call count are trusted; prompt text is never a selector.
+    Only the installed chat-completions shape is changed, without mutating history.
+    """
+    count=context.get('api_call_count')
+    if getattr(identity,'job_name',None)!='fish-surf' or context.get('api_mode','chat_completions')!='chat_completions' or type(count)is not int or count<=SURF_BROWSE_CALLS:return request
+    tools=request.get('tools');messages=request.get('messages')
+    if not isinstance(tools,list)or not isinstance(messages,list):return request
+    def name(tool):return tool.get('function',{}).get('name')if isinstance(tool,dict)and isinstance(tool.get('function',{}),dict)else None
+    kept=[t for t in tools if name(t)not in SURF_NETWORK_TOOLS]
+    if len(kept)==len(tools)or not kept:return request
+    result={**request,'tools':kept,'messages':[*messages,{'role':'user','content':SURF_CLOSEOUT}]}
+    choice=request.get('tool_choice')
+    if isinstance(choice,dict)and name(choice)in SURF_NETWORK_TOOLS:result['tool_choice']='auto'
+    return result
+
+
+def surf_admission(root,snapshot,now):
+    """A pre-wake estimate, not a token reservation or a promise of future cost."""
+    if not snapshot['settings']['enabled']:return None
+    root=Path(root);now=now.astimezone(TZ);path=root/'.hermes/cron/jobs.json'
+    jobs=json.loads(path.read_text()).get('jobs',[])if path.exists()else []
+    selected={}
+    for name in ('fish-surf','fish-memory'):
+        matches=[r for r in jobs if r.get('name')==name]
+        if len(matches)>1:raise ValueError('项目任务重名，无法核对冲浪开销预检。')
+        selected[name]=matches[0]if matches else None
+    costs={name:[]for name in selected};audit=root/'.hermes/cron/usage_audit.jsonl'
+    if audit.exists():
+        if audit.stat().st_size>4_000_000:raise ValueError('任务用量记录过大，冲浪预检暂缓。')
+        for line in reversed(audit.read_text().splitlines()[-200:]):
+            try:
+                row=json.loads(line)
+                if not isinstance(row,dict)or not isinstance(row.get('ts'),str):continue
+                at=datetime.fromisoformat(row['ts'].replace('Z','+00:00'));total=row['total_tokens']
+                if at.tzinfo is None or not timedelta(0)<=now-at<=timedelta(days=14)or type(total)is not int or total<=0:continue
+                for name,job in selected.items():
+                    if job and row.get('job_id')==job.get('id')and len(costs[name])<3:costs[name].append(total)
+            except (ValueError,TypeError,KeyError):continue
+    # Failed/partial attempts still cost tokens, and cannot pull the floor down.
+    outing=max([400_000,*costs['fish-surf']]);memory=0;job=selected['fish-memory']
+    if job and job.get('enabled',True)is True:
+        scheduled=datetime.fromisoformat(job['next_run_at'].replace('Z','+00:00'))
+        if scheduled.tzinfo is None:raise ValueError('记忆任务时间缺少时区，冲浪预检暂缓。')
+        if scheduled>now and scheduled.astimezone(TZ).date()==now.date():memory=max([400_000,*costs['fish-memory']])
+    return {'outing_estimate':outing,'later_memory_estimate':memory,'required':outing+memory,
+            'allowed':snapshot['remaining']>=outing+memory}
 
 
 def record_cron_owner(root,session,identity):

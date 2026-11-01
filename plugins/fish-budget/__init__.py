@@ -37,10 +37,14 @@ class Guard:
 
     def execute(self,request,next_call,**context):
         is_background=background(context);ident='main-'+uuid4().hex;prepared=request
+        identity=None
         if is_background and self.cron_identity:
-            try:self.module.record_cron_owner(self.root,context.get('session_id',''),self.cron_identity())
+            try:
+                identity=self.cron_identity()
+                self.module.record_cron_owner(self.root,context.get('session_id',''),identity)
             except Exception:pass  # Missing identity leaves the outing unbound; never guess its owner.
         try:
+            if is_background:request=self.module.surf_closeout(request,identity,context)
             with self.module.Budget(self.root) as ledger:
                 if is_background:
                     snapshot=ledger.snapshot()
