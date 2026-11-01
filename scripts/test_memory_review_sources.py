@@ -115,7 +115,7 @@ class ReviewSourcesTest(unittest.TestCase):
         with self.assertRaises(ValueError): self.finish(ident)
     def test_real_cli_reads_one_selected_source_from_another_directory(self):
         row = self.record(('引号"与控制符\x01换行\n'*250)+'这是最后的限定条件，不可省略。'); ident = self.start(); scripts = self.root/'scripts'; scripts.mkdir()
-        for name in ('activity_gate.py', 'curiosity.py', 'fish_journal.py', 'personality.py'):
+        for name in ('activity_gate.py', 'curiosity.py', 'fish_journal.py', 'personality.py', 'memory_review_backup.py'):
             shutil.copy2(Path(__file__).with_name(name), scripts/name)
         result = subprocess.run(['python3', str(scripts/'activity_gate.py'), 'review', '--snapshot', ident, '--episode', row['id']], cwd=self.root.parent, capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stderr); self.assertEqual(''.join(json.loads(result.stdout)['episode']['source_parts']), row['excerpt'])

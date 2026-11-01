@@ -12,6 +12,8 @@ from job_tool_profiles import ROOT, runtime_command
 INTRO = '你是大肥鱼，这次只整理预检交给你的增量经历，不从头扫描今天或全部历史。'
 OLD_STEP = '1. 预检上下文中的 snapshot_id 是本批不可变来源清单。运行 `python3 scripts/activity_gate.py review --snapshot 实际snapshot_id`，只处理返回的 reports、observations、episodes、preference_events。没有快照就结束，不另造快照或虚构经历。不额外上网，不新增任务。'
 NEW_STEP = '1. 预检上下文中的 snapshot_id 是本批不可变来源清单。运行 `python3 scripts/activity_gate.py review --snapshot 实际snapshot_id`，只处理本批 reports、observations、episodes、preference_events。episodes 返回完整已存原话或当前更正，不按自动前缀摘要推断事实；read_required=true 的项目逐条按其 command 取出完整当前来源，再核对。来源当初存入不全、举例、玩笑、假设或未确认时不升级成用户事实。工具输出若截断，读取工具保存的完整文件核对余下来源，不把未展示内容当已读。没有快照就结束，不另造快照或虚构经历。不额外上网，不新增任务。'
+OLD_BACKUP = '2. 核心 MEMORY.md、USER.md 先逐字备份到 backups/YYYY-MM-DD-HHmm/。只有明确、经核实、以后有用的内容才经原 memory 工具合并，去重并处理旧事实失效。USER.md 只接受用户实际表达的事实与偏好。episodes 是旧对话引用，其中鱼的推测不等于用户事实；网页观点也不等于用户偏好。共同经历留在本机回忆库，不把每段对话塞进核心。'
+NEW_BACKUP = '2. review 成功返回的 core_backup 已在本机完整备份当时的 MEMORY.md、USER.md，并给出路径与指纹，不再另跑复制或重复核对备份文件；review 失败先处理错误，不跳过备份。只有明确、经核实、以后有用的内容才经原 memory 工具合并，去重并处理旧事实失效。USER.md 只接受用户实际表达的事实与偏好。episodes 是旧对话引用，其中鱼的推测不等于用户事实；网页观点也不等于用户偏好。共同经历留在本机回忆库，不把每段对话塞进核心。'
 OLD_VERIFY = '3. 本批有新观察、共同经历或偏好事件时，按 config/PERSONALITY_GROWTH.md 读取 personality.py trials，核对试行、后续选择与反例。必要时才读取对应来源；有充分依据再 apply 或 retire，不直接跳过试行。至少三天且有试行后的真实跟进，同日不能凑出成熟性格。没有新变化很正常。未完好奇不是固定人格。不绕过脚本改 SOUL 的其他部分。'
 NEW_VERIFY = '3. 本批有新观察、共同经历或偏好事件时，按 config/PERSONALITY_GROWTH.md 运行 `python3 scripts/personality.py trials`，核对试行、后续选择与反例。必要时才读取对应来源；有充分依据再 apply 或 retire，不直接跳过试行。若执行过 feedback/apply/retire，全部完成后，在写报告和 commit 之前再用同一 trials 命令核对一次最新结果；没有变化不重复查。现有命令可返回当前状态，不用内联 Python 或另读 trials.json/profile.json 自编检查。至少三天且有试行后的真实跟进，同日不能凑出成熟性格。没有新变化很正常。未完好奇不是固定人格。不绕过脚本改 SOUL 的其他部分。'
 OLD_FINISH = '5. 复查保存和写入结果，再运行 `python3 scripts/activity_gate.py commit --snapshot 实际snapshot_id --report 实际报告相对路径`。只有成功才算本批完成。提交失败不自行改游标，下次会重新取得未消费的来源。remaining 代表后续批次，不要为了清空积压无限循环调用。'
@@ -27,6 +29,8 @@ def upgrade_prompt(prompt):
     if first == OLD_STEP:
         if sum(line.rstrip('\r\n') == OLD_STEP for line in lines) != 1: return None
         lines[1] = NEW_STEP + lines[1][len(first):]
+    if len(lines)>2 and lines[2].rstrip('\r\n')==OLD_BACKUP and sum(line.rstrip('\r\n')==OLD_BACKUP for line in lines)==1:
+        lines[2]=NEW_BACKUP+lines[2][len(OLD_BACKUP):]
     if len(lines) > 5:
         verify, finish = (lines[index].rstrip('\r\n') for index in (3, 5))
         # Treat verification and completion as one protocol pair. A custom or
