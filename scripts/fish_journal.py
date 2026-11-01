@@ -39,7 +39,8 @@ def instant(value):
 STOP = set('这个 那个 什么 怎么 为什么 可以 知道 觉得 应该 一个 一下 不是 就是 还是 然后 现在 今天 昨天 我们 你们 他们 爸爸 大肥 肥鱼 谢谢 你好 晚安 早安 哈哈 好的 行的 收到 在吗 请问 能不能 上次 那次 之前 以前 后来 记得 还记 帮我 回忆 喜欢 讨厌 事情 内容 说过 聊过 记忆'.split())
 # These may help a manual search, but alone do not identify which event a chat refers to.
 # Keep them in the index: an explicit user alias is still a deliberate reference.
-WEAK_EVIDENCE = set('最后 恢复 处理 更新 正常 重新 完成 安排 终于 目前 解决 结果 当时 时候 然后 以后 换了 自己 一起 推荐 密码 牌子 名字 时间 日期 位置 价格 数量 号码 尾号'.split())
+# General time, sound and location descriptors alone do not identify an event.
+WEAK_EVIDENCE = set('最后 恢复 处理 更新 正常 重新 完成 安排 终于 目前 解决 结果 当时 时候 然后 以后 换了 自己 一起 推荐 密码 牌子 名字 时间 日期 位置 价格 数量 号码 尾号 声音 地方 清晨 早晨 早上 上午 中午 下午 傍晚 晚上 深夜 夜里 白天'.split())
 SECRET = re.compile(r'(?:sk-[A-Za-z0-9_-]{16,}|gh[pousr]_[A-Za-z0-9_]{16,}|github_pat_[A-Za-z0-9_]{16,}|(?i:Bearer\s+)[A-Za-z0-9_.-]{16,}|(?i:(?:api[_ -]?key|token|password|密钥|密码)\s*[:=：]\s*)[^\s,，;；]{8,})')
 
 

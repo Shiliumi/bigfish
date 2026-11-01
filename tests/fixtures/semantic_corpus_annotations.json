@@ -1,0 +1,13 @@
+{
+  "scope": "仅用于多材料合并语料的评阅修订；保留原材料和全部查询，不将标签修正计作检索改善。",
+  "annotations": [
+    {
+      "group": "semantic_transfer.json",
+      "query": "蓝牙耳机的固件升级了没？",
+      "kind": "ambiguous_subject",
+      "expected": [],
+      "related": ["ming-headphones", "qiao-headphones"],
+      "reason": "合并 memory_constraints 后已有两副耳机的固件记录；问题没说明指哪副，允许相关来源用于核对，打印设备仍是无关来源。"
+    }
+  ]
+}

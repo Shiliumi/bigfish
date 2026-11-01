@@ -1,0 +1,20 @@
+{
+  "scope": "新增虚构的通用属性词干扰回放，开发者已知既有错误后编写，非盲测。保留具体主题与缺失细节控制，不使用私人聊天。",
+  "episodes": [
+    {"key":"desk-fan","user":"客厅风扇转动时嗡嗡响。","assistant":"清理叶片后声音轻多了，没有换电机。","day":18},
+    {"key":"wood-bell","user":"门口挂着一个木铃，风吹时会响。","assistant":"声音柔和，我们没有记录品牌。","day":18},
+    {"key":"trail-map","user":"旧地图上用铅笔圈了一个地方，在山谷入口。","assistant":"只聊过徒步路线，没有保存定位坐标。","day":18}
+  ],
+  "queries": [
+    {"query":"客厅风扇的声音怎么变轻的？","expected":["desk-fan"]},
+    {"query":"门口木铃的声音听着怎么样？","expected":["wood-bell"]},
+    {"query":"山谷入口那个地方怎么在地图上标的？","expected":["trail-map"]},
+    {"query":"徒步路线在旧地图上怎么圈的？","expected":["trail-map"]},
+    {"query":"你还记得电钻的声音吗？","expected":[]},
+    {"query":"投影仪有声音吗？","expected":[]},
+    {"query":"你还记得车站行李寄存的地方吗？","expected":[]},
+    {"query":"药箱收在什么地方？","expected":[]},
+    {"query":"门口木铃是什么牌子？","expected":[],"kind":"missing_detail","related":["wood-bell"]},
+    {"query":"山谷入口那个地方的定位坐标呢？","expected":[],"kind":"missing_detail","related":["trail-map"]}
+  ]
+}
