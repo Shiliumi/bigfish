@@ -107,8 +107,12 @@ def classify(query):
     return 'neutral'
 
 
-def recent_turns(journal,session_id,now,*,minutes,limit):
+def recent_turns(journal,session_id,now,*,minutes,limit,barriers=False):
     now=instant(now or datetime.now(timezone.utc))
+    if barriers:
+        # Keep an unavailable latest turn as a boundary without returning its text.
+        # Filtering it out could reconnect an older joke across a correction/forget.
+        return journal.db.execute("SELECT CASE WHEN status='active' AND corrected_at IS NULL AND julianday(valid_from)<=julianday(?) AND (valid_until IS NULL OR julianday(valid_until)>julianday(?)) THEN excerpt ELSE NULL END AS excerpt FROM episodes WHERE session_id=? AND julianday(recorded_at)>julianday(?) AND julianday(recorded_at)<=julianday(?) ORDER BY julianday(recorded_at) DESC,rowid DESC LIMIT ?",(now.isoformat(),now.isoformat(),session_id,(now-timedelta(minutes=minutes)).isoformat(),now.isoformat(),limit)).fetchall()
     return journal.db.execute("SELECT excerpt FROM episodes WHERE session_id=? AND status='active' AND corrected_at IS NULL AND julianday(recorded_at)>julianday(?) AND julianday(recorded_at)<=julianday(?) AND julianday(valid_from)<=julianday(?) AND (valid_until IS NULL OR julianday(valid_until)>julianday(?)) ORDER BY julianday(recorded_at) DESC,rowid DESC LIMIT ?",(session_id,(now-timedelta(minutes=minutes)).isoformat(),now.isoformat(),now.isoformat(),now.isoformat(),limit)).fetchall()
 
 
@@ -142,20 +146,28 @@ def recent_feedback(journal,session_id,query='',now=None):
     return [kind for kind in STYLE_HINTS if active.get(kind)]
 
 
+def continuation_cue(query):
+    text=user_words(query).strip()
+    if not text or len(text)>70:return False
+    if re.search(r'什么意思|什么含义|出处|典故|翻译|拼音|读音|怎么(?:读|念)|为什么|如何',text):return False
+    if re.fullmatch(r'(?:你(?:说|猜)(?:呢|呗|嘛|呀|啊)?|猜猜|你(?:再)?(?:想想|品品)|再(?:想想|品品)|嗯|啊|然后呢|接着呢)[，,？?！!。~～…]*',text):return True
+    return bool(re.search(r'^(?:那|所以|怪不得|原来|得[，,。]|叫你|就叫|你看|看你|还敢|再念|再读)|(?:念一遍|连起来|合起来|外号)',text))
+
+
 def turn_mode(query,journal,session_id,now=None):
     mode=classify(query)
-    if mode not in ('casual','neutral')or not session_id:return mode
-    text=user_words(query).strip()
-    # Follow a short, recent setup only in this conversation. No inferred mood is saved.
-    if len(text)>70 or not re.search(r'^(?:那|所以|怪不得|原来|得[，,。]|叫你|就叫|你看|看你|还敢|再念|再读)|(?:念一遍|连起来|合起来|外号)',text):return mode
-    if re.search(r'什么意思|什么含义|出处|典故|翻译|拼音|读音|怎么(?:读|念)|为什么|如何',text):return mode
-    now=instant(now or datetime.now(timezone.utc))
-    rows=recent_turns(journal,session_id,now,minutes=30,limit=2)
-    for row in rows:
+    if mode not in ('casual','neutral')or not session_id or not continuation_cue(query):return mode
+    # Reconstruct at most two adjacent turns, rather than jumping over an unrelated
+    # remark to find an old setup. Ambiguous personal remarks alone prove no joke.
+    rows=recent_turns(journal,session_id,now,minutes=30,limit=2,barriers=True)
+    previous=None
+    for row in reversed(rows):
+        if row['excerpt'] is None:
+            previous=None;continue
         prior=row['excerpt'].removeprefix('你：').partition('\n大肥鱼：')[0]
-        if classify(prior) in ('focused','gentle','feedback','interest'):break
-        if playful_cue(user_words(prior)):return 'playful'
-    return mode
+        current=classify(prior)
+        previous='playful'if current in ('casual','neutral')and previous=='playful'and continuation_cue(prior)else current
+    return 'playful'if previous=='playful'else mode
 
 
 def resolve_mode(query,journal,session_id='',now=None):

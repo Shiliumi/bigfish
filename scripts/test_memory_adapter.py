@@ -61,6 +61,21 @@ class AdapterTest(unittest.TestCase):
         self.assertIn('"mode":"gentle"',self.provider.prefetch('今天很难受，先别闹了。'))
         self.assertNotIn('"mode":"personal"',self.provider.prefetch('你是不是支持图片？'))
 
+    def test_elliptic_callback_defers_trials_and_new_topic_restores_them(self):
+        from datetime import datetime,timezone
+        now=datetime.now(timezone.utc);text='我似乎更愿意先核对参数再慢慢评述。';self.initialize()
+        with Journal(self.root,now=now)as journal:row=journal.capture('seed','看看折纸机关的尺寸。','这次参数值得核对。')
+        self.provider.growth.propose_trial(self.root,{'id':'parameters','kind':'expression','text':text,'reason':'实际聊到了核对参数的过程。','evidence_ids':[row['id']]},now)
+        self.assertIn(text,self.provider.prefetch('普通讨论。'))
+        self.provider.sync_turn('你今天有种微波炉土豆的气质。','烫嘴是吧。')
+        packet=self.provider.prefetch('你说呢？')
+        self.assertIn('"mode":"playful"',packet);self.assertNotIn(text,packet)
+        self.provider.sync_turn('你说呢？','还不能碰是吧。')
+        self.assertIn('"mode":"playful"',self.provider.prefetch('再想想。'))
+        self.provider.sync_turn('我刚泡了杯茶。','慢慢喝。')
+        packet=self.provider.prefetch('那就歇会吧。')
+        self.assertNotIn('"mode":"playful"',packet);self.assertIn(text,packet)
+
     def test_synced_interest_link_is_bound_to_the_actual_conversation(self):
         from datetime import datetime,timezone,timedelta
         now=datetime.now(timezone.utc);self.initialize()

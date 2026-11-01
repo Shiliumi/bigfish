@@ -121,6 +121,49 @@ class ConversationTest(unittest.TestCase):
         with Journal(self.root,now=self.now)as store:
             store.capture('chat','你今天好靠谱呀！','嘿，这句我收下了。',recorded_at=(self.now-timedelta(minutes=1)).isoformat())
             self.assertEqual(talk.turn_mode('那就歇会吧。',store,'chat',self.now),'neutral')
+    def test_elliptic_replies_follow_only_a_recent_playful_setup(self):
+        with Journal(self.root,now=self.now)as store:
+            store.capture('chat','你今天有种微波炉土豆的气质。','烫嘴是吧。',recorded_at=(self.now-timedelta(minutes=2)).isoformat())
+            for query in ['你说呢？','你猜。','再想想。','你品品。','嗯？','然后呢？']:
+                with self.subTest(query=query):
+                    self.assertEqual(talk.classify(query),'neutral')
+                    self.assertEqual(talk.turn_mode(query,store,'chat',self.now),'playful')
+                    self.assertEqual(talk.turn_mode(query,store,'other',self.now),'neutral')
+                    self.assertEqual(talk.turn_mode(query,store,'chat',self.now+timedelta(hours=1)),'neutral')
+            for query in ['然后呢？帮我修这个 bug。','你猜，我很难受。','你说呢，认真回答。','你猜是什么意思？','“你说呢？”','```text\n你猜\n```']:
+                with self.subTest(query=query):self.assertNotEqual(talk.turn_mode(query,store,'chat',self.now),'playful')
+    def test_continuation_is_reconstructed_but_does_not_become_a_lasting_mode(self):
+        with Journal(self.root,now=self.now)as store:
+            store.capture('chat','你今天有种微波炉土豆的气质。','烫嘴是吧。',recorded_at=(self.now-timedelta(minutes=3)).isoformat())
+            store.capture('chat','你猜。','还不能碰是吧。',recorded_at=(self.now-timedelta(minutes=2)).isoformat())
+            self.assertEqual(talk.turn_mode('再想想。',store,'chat',self.now),'playful')
+            store.capture('chat','再想想。','这回真卡住了。',recorded_at=(self.now-timedelta(minutes=1)).isoformat())
+            self.assertEqual(talk.turn_mode('你说呢？',store,'chat',self.now),'neutral')
+    def test_a_new_topic_or_sincere_remark_blocks_an_older_setup(self):
+        for index,query in enumerate(['我刚泡了杯茶。','你今天好靠谱呀！','我很累。','帮我看报错。','不猜了。','最近看什么好玩的？']):
+            with self.subTest(query=query),Journal(self.root,now=self.now)as store:
+                session='barrier-'+str(index)
+                store.capture(session,'你今天有种微波炉土豆的气质。','烫嘴是吧。',recorded_at=(self.now-timedelta(minutes=2)).isoformat())
+                store.capture(session,query,'先接眼前的话。',recorded_at=(self.now-timedelta(minutes=1)).isoformat())
+                self.assertEqual(talk.turn_mode('那就歇会吧。',store,session,self.now),'neutral')
+                self.assertEqual(talk.turn_mode('你说呢？',store,session,self.now),'neutral')
+    def test_unavailable_latest_turn_is_a_boundary_without_exposing_its_text(self):
+        with Journal(self.root,now=self.now)as store:
+            store.capture('chat','你今天有种微波炉土豆的气质。','烫嘴是吧。',recorded_at=(self.now-timedelta(minutes=2)).isoformat())
+            row=store.capture('chat','你猜。','PRIVATE-FICTION-UNAVAILABLE',recorded_at=(self.now-timedelta(minutes=1)).isoformat())
+            for changes in ["status='forgotten'", "corrected_at='2026-10-28T03:59:00+00:00'", "valid_until='2026-10-28T03:59:00+00:00'", "valid_from='2026-10-28T04:01:00+00:00'"]:
+                with self.subTest(changes=changes):
+                    store.db.execute('UPDATE episodes SET '+changes+' WHERE id=?',(row['id'],))
+                    recent=talk.recent_turns(store,'chat',self.now,minutes=30,limit=2,barriers=True)
+                    self.assertIsNone(recent[0]['excerpt'])
+                    self.assertEqual(talk.turn_mode('你说呢？',store,'chat',self.now),'neutral')
+                    store.db.execute('UPDATE episodes SET status=\'active\',corrected_at=NULL,valid_until=NULL,valid_from=? WHERE id=?',((self.now-timedelta(minutes=1)).isoformat(),row['id']))
+    def test_ambiguous_personal_setup_does_not_make_a_followup_a_joke(self):
+        with Journal(self.root,now=self.now)as store:
+            for index,query in enumerate(['你是不是很糯呀？','你今天好靠谱呀！','你最近是不是有点累啊']):
+                session='personal-'+str(index)
+                store.capture(session,query,'先接这句。',recorded_at=(self.now-timedelta(minutes=1)).isoformat())
+                self.assertEqual(talk.turn_mode('你说呢？',store,session,self.now),'neutral')
     def test_personal_cue_does_not_capture_capabilities_materials_or_real_tasks(self):
         for query in ['你是不是很会做饭啊？','你是不是很懂这个算法？','你是不是很能吃苦？','你是不是支持图片？','你是不是很方是什么意思？','有人问你是不是很方啊','他说“你是不是很方啊”，帮我分析语法。','```text\n你是不是很方啊\n```\n原文。','你今天好靠谱呀，帮我修复报错。','你今天好靠谱呀，但我很难受。']:
             with self.subTest(query=query):self.assertNotEqual(talk.classify(query),'personal')
