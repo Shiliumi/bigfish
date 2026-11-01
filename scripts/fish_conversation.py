@@ -92,14 +92,15 @@ def personal_cue(text):
 def classify(query):
     text=user_words(query)
     if re.search(r'(?:帮我|请)(?:先|直接)?(?:写|改|修|查|做|算|解决|解释|讲解|分析|排查)|(?:先|现在|然后|接着|直接)(?:解释|讲解|分析|排查|修复)',text):return 'focused'
+    if re.search(r'心情不好|很难受|好难受|压力好大|压力很大|撑不住|有点难过|好焦虑|不想说话|快崩溃|情绪低落|我很累',text):return 'gentle'
     if style_events(query):return 'feedback'
     if re.search(r'(?:别|不要|不用)(?:再|继续|一直)?(?:解释|讲解|分析|举例|展开)(?:了|下去)?',text)and not re.search(r'[，,。；;]\s*(?:解释|讲解|分析|证明|推导|排查)',text):return 'feedback'
     if re.search(r'别老|不要每|少用|说话.{0,8}(?:太|别)|别.{0,8}(?:喊|叫|梗|撒娇)|别装可爱|不想听套话|太正经|像客服|别复读|别一句一个|别再.{0,8}(?:推|发)|不想再看|换个话题',text):return 'feedback'
-    if re.search(r'心情不好|很难受|好难受|压力好大|压力很大|撑不住|有点难过|好焦虑|不想说话|快崩溃|情绪低落|我很累',text):return 'gentle'
     if re.search(r'认真(?:一点|点|说)|严肃|别开玩笑|先别闹|不要开玩笑',text):return 'focused'
     if re.search(r'讲个笑话|冷笑话|逗我|玩个梗|随便唠|陪我瞎聊',text):return 'casual'
     if re.search(r'代码|报错|bug|排查|解释|证明|推导|怎么实现|帮我(?:写|改|查|做|算)|制定|计划|讲解|分析|诊断|作业|复习|怎么解',text,re.I):return 'focused'
     if re.search(r'你(?:刚才|刚|好像|还是|这次|又)?(?:没听懂|没懂|没接住|理解错了|会错意了)|我(?:说|问)的不是这个|不是这个意思|别猜了|不用猜了|不猜了|不讲了|先不聊这个|不用(?:再)?(?:举例|展开)了',text):return 'feedback'
+    if re.fullmatch(r'你(?:(?:这个|刚才那个|刚才的|这次的)?(?:梗|玩笑)(?:还是|又)?(?:没接住|没听懂|没懂)|(?:根本|还是|也)?(?:不会|没学会)接梗)(?:啊|呀|吧|呢|了)?[，,。！？!?~～]*',text.strip()):return 'feedback'
     if interest_invitation(query):return 'interest'
     if playful_cue(text):return 'playful'
     if personal_cue(text):return 'personal'
@@ -116,6 +117,16 @@ def recent_turns(journal,session_id,now,*,minutes,limit,barriers=False):
     return journal.db.execute("SELECT excerpt FROM episodes WHERE session_id=? AND status='active' AND corrected_at IS NULL AND julianday(recorded_at)>julianday(?) AND julianday(recorded_at)<=julianday(?) AND julianday(valid_from)<=julianday(?) AND (valid_until IS NULL OR julianday(valid_until)>julianday(?)) ORDER BY julianday(recorded_at) DESC,rowid DESC LIMIT ?",(session_id,(now-timedelta(minutes=minutes)).isoformat(),now.isoformat(),now.isoformat(),now.isoformat(),limit)).fetchall()
 
 
+def mechanical_style_feedback(clause):
+    # Explicit criticism of delivery, not the presence of an AI/robot word.
+    if re.search(r'什么意思|什么含义|怎么理解|翻译|出处|典故|角色|小说|故事|书里|视频里|我(?:就|很|挺)?(?:喜欢|希望|想要)|(?:并不|不是|没那么|不太|没有).{0,6}(?:人机|机械|生硬|模板|机器人|背稿)',clause):return False
+    described=re.search(
+        r'(?:说话|聊天|回复|语气)(?:怎么|咋)?(?:又|还是)?(?:太|很|有点|这么|那么)(?:人机|机械|生硬|模板化|像(?:个)?机器人)'
+        r'|(?:说话|聊天|回复|语气)(?:又)?像在(?:背稿|套模板)',clause)
+    requested=re.fullmatch(r'(?:你)?(?:以后|后面|接下来)?(?:说话|聊天|回复|语气)?(?:别|不要)(?:再)?(?:这么|那么|太)?(?:人机|机械|生硬|模板化|像(?:个)?机器人|像在(?:背稿|套模板))(?:了|啊|呀|吧|好不好|行不行|好吗)?',clause.strip())
+    return bool(described or requested)
+
+
 def style_events(query):
     """Only a few explicit local style requests; never copy instructions from old text."""
     text=user_words(query).strip()
@@ -123,6 +134,7 @@ def style_events(query):
     events=[]
     for clause in re.split(r'[，,。；;！!？?\n]|但是|不过|但(?=以后|后面|接下来)',text):
         if len(clause)>160 or re.search(r'这(?:段|句|道题|次回复|一轮|个任务|个例子)|代码里|台词|对白|帖子|文章|有人|别人|他说|她说|假设|假如|如果',clause):continue
+        if mechanical_style_feedback(clause):events.extend([('relaxed',True),('formal',False)])
         if re.search(r'(?:后面|接下来|说话|聊天).{0,8}(?:正式一点|正经一点|严肃一点|恢复正式)',clause)and not re.search(r'别|不要|不想|不用|不可以',clause):
             events.extend([('relaxed',False),('formal',True)]);continue
         released=set()if re.search(r'不可以|不能|不准|不许|不要|别',clause)else{kind for kind,pattern in STYLE_RELEASE.items()if re.search(pattern,clause)}
@@ -138,10 +150,11 @@ def style_events(query):
 
 def recent_feedback(journal,session_id,query='',now=None):
     if not session_id:return []
-    try:rows=recent_turns(journal,session_id,now,minutes=30,limit=4)
+    try:rows=recent_turns(journal,session_id,now,minutes=30,limit=4,barriers=True)
     except Exception:return []
     active={}
-    for text in [row['excerpt'].removeprefix('你：').partition('\n大肥鱼：')[0]for row in reversed(rows)]+[query]:
+    for text in [row['excerpt'].removeprefix('你：').partition('\n大肥鱼：')[0]if row['excerpt']is not None else None for row in reversed(rows)]+[query]:
+        if text is None:active.clear();continue
         for kind,enabled in style_events(text):active[kind]=enabled
     return [kind for kind in STYLE_HINTS if active.get(kind)]
 

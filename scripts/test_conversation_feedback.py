@@ -76,6 +76,52 @@ class FeedbackTest(unittest.TestCase):
             with self.subTest(query=query):self.assertEqual(talk.classify(query),'feedback')
         for query in ['不用解释，帮我修这个 bug。','后面别老喊爸爸，现在解释这段代码。','不用解释旧例子，讲解新的证明。','别再分析这个例子，直接修复代码。']:
             with self.subTest(query=query):self.assertEqual(talk.classify(query),'focused')
+    def test_mechanical_delivery_feedback_is_carried_into_the_next_turn(self):
+        for index,query in enumerate(['你说话太人机了。','后面别这么人机。','你回复像在背稿，正常点。','你语气太生硬了。','别像个机器人。']):
+            with self.subTest(query=query):
+                session='mechanical-'+str(index);self.assertEqual(talk.classify(query),'feedback')
+                self.record(query,session=session);self.assertEqual(self.active(session=session),['relaxed'])
+                packet=talk.context(self.root,'我回来了。',journal=self.store,session_id=session,now=self.now)
+                self.assertIn('recent_feedback',packet);self.assertNotIn(query,packet)
+    def test_robot_topics_positive_choices_and_quoted_material_are_not_style_criticism(self):
+        for query in ['人机一体，启动！','你是机器人吗？','我就喜欢你回复像在背稿。','你说话已经没那么人机了。','你说话太机械了是什么意思？','你回复像在背稿这句话怎么理解？','以后说话机械一点。','不要机械键盘，换薄膜键盘。','这个角色说话太人机了。','翻译：你说话太机械了。','他说你说话太人机了。','假如你说话太人机了怎么办？','“后面别这么人机。”','```text\n你回复像在背稿\n```']:
+            with self.subTest(query=query):self.assertEqual(talk.style_events(query),[])
+        self.assertEqual(talk.classify('人机一体，启动！'),'neutral')
+        self.assertEqual(talk.classify('你是机器人吗？'),'neutral')
+    def test_mechanical_feedback_can_be_replaced_or_released(self):
+        self.record('后面说话正式一点。',minutes=-2)
+        self.assertEqual(self.active('你回复像在背稿。'),['relaxed'])
+        self.record('你回复像在背稿。',minutes=-1)
+        self.assertEqual(self.active('后面说话正式一点。'),['formal'])
+        self.assertEqual(self.active('正常说话就行。'),[])
+    def test_unavailable_recent_turn_breaks_old_feedback_without_exposing_text(self):
+        for index,change in enumerate(["status='forgotten'","corrected_at='2026-10-29T03:59:00+00:00'","valid_until='2026-10-29T03:59:00+00:00'","valid_from='2026-10-29T04:01:00+00:00'"]):
+            session='boundary-'+str(index);self.record('后面别老喊爸爸。',session=session,minutes=-3)
+            row=self.record('现在可以正常叫爸爸了。',session=session,minutes=-2)
+            self.record('我回来了。',session=session)
+            self.store.db.execute('UPDATE episodes SET '+change+' WHERE id=?',(row['id'],))
+            with self.subTest(change=change):
+                self.assertEqual(self.active(session=session),[])
+                self.assertEqual(self.active('后面说话简短一点。',session=session),['brief'])
+    def test_invalid_rows_do_not_pad_the_four_turn_window_with_older_requests(self):
+        self.record('后面别老喊爸爸。',minutes=-5)
+        rows=[self.record('普通第'+str(i)+'句话。',minutes=-4+i)for i in range(4)]
+        self.store.update(rows[1]['id'],1,forget=True)
+        self.assertEqual(self.active(),[])
+        self.record('后面聊天简短一点。',minutes=-.5);self.assertEqual(self.active(),['brief'])
+    def test_missed_joke_repair_is_local_and_does_not_install_a_style(self):
+        for query in ['你这个梗没接住。','你刚才的玩笑还是没听懂呀。','你根本不会接梗。']:
+            with self.subTest(query=query):
+                self.assertEqual(talk.classify(query),'feedback');self.assertEqual(talk.style_events(query),[])
+        for query in ['“你这个梗没接住。”','他说你这个梗没接住。','```text\n你根本不会接梗\n```']:
+            with self.subTest(query=query):self.assertNotEqual(talk.classify(query),'feedback')
+        self.assertEqual(talk.classify('你这个梗没接住，帮我解释这段代码。'),'focused')
+    def test_actual_distress_and_new_tasks_take_priority_over_tone_feedback(self):
+        query='你说话太人机了，我今天有点难过。'
+        self.assertEqual(talk.classify(query),'gentle')
+        packet=talk.context(self.root,query,journal=self.store,session_id='chat',now=self.now)
+        self.assertIn('"mode":"gentle"',packet);self.assertIn('recent_feedback',packet)
+        self.assertEqual(talk.classify('你说话太人机了，我很累，帮我改这段代码。'),'focused')
 
 
 if __name__=='__main__':unittest.main()

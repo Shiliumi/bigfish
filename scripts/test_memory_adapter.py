@@ -76,6 +76,21 @@ class AdapterTest(unittest.TestCase):
         packet=self.provider.prefetch('那就歇会吧。')
         self.assertNotIn('"mode":"playful"',packet);self.assertIn(text,packet)
 
+    def test_mechanical_feedback_carries_then_stops_at_a_forgotten_boundary(self):
+        from datetime import datetime,timezone
+        now=datetime.now(timezone.utc);self.initialize();text='我似乎更愿意先核对参数再慢慢评述。'
+        with Journal(self.root,now=now)as journal:row=journal.capture('seed','核对折纸机关尺寸。','看看参数再评述。')
+        self.provider.growth.propose_trial(self.root,{'id':'parameters','kind':'expression','text':text,'reason':'这次核对过具体尺寸。','evidence_ids':[row['id']]},now)
+        self.provider.sync_turn('你回复像在背稿。','好，直接聊。')
+        packet=self.provider.prefetch('我回来了。')
+        self.assertIn('recent_feedback',packet);self.assertNotIn(text,packet)
+        self.provider.sync_turn('正常说话就行。','行。')
+        with Journal(self.root)as journal:
+            latest=journal.db.execute("SELECT id,revision FROM episodes WHERE session_id='chat-new' ORDER BY rowid DESC LIMIT 1").fetchone()
+            journal.update(latest['id'],latest['revision'],forget=True)
+        packet=self.provider.prefetch('我回来了。')
+        self.assertNotIn('recent_feedback',packet);self.assertIn(text,packet)
+
     def test_synced_interest_link_is_bound_to_the_actual_conversation(self):
         from datetime import datetime,timezone,timedelta
         now=datetime.now(timezone.utc);self.initialize()
