@@ -28,4 +28,63 @@ class CuriosityTest(unittest.TestCase):
  def test_want_more_requires_this_runs_fresh_evidence(self):
   thread=c.remember(self.root,self.proposal,self.now)[0];run=c.begin(self.root,thread['id'],self.now+timedelta(hours=3))['run'];p=self.root/self.obs['report_path'];p.parent.mkdir(parents=True,exist_ok=True);p.write_text('old report')
   with self.assertRaises(ValueError):c.finish(self.root,{'run_id':run['id'],'outcome':'want_more','reason':'还想继续追他这个有意思的机关','report_path':self.obs['report_path'],'evidence_ids':['obs-real']},self.now+timedelta(hours=3,minutes=5))
+ def pair(self):
+  one=c.remember(self.root,self.proposal,self.now)[0]
+  two=c.remember(self.root,{**self.proposal,'question':'他怎样让积木柜子的门自己弹开？'},self.now)[0]
+  return one,two
+ def reading(self,thread):
+  start=self.now+timedelta(hours=3);seen=start+timedelta(minutes=2);end=start+timedelta(minutes=5)
+  name='reports/2026-10-27/1505-surf.md';path=self.root/name;path.parent.mkdir(parents=True,exist_ok=True);path.write_text('真实虚构夹具阅读 https://example.org/followup')
+  page={'report':name,'url':'https://example.org/followup','read_at':seen.isoformat()}
+  visited=c.load(self.root/'data/surf-state.json',{'visited':[]})['visited'];c.atomic(self.root/'data/surf-state.json',{'visited':[*visited,page]})
+  return {'id':'browse-fiction','thread_id':thread['id'],'status':'finished','outcome':'satisfied','started_at':start.isoformat(),'finished_at':end.isoformat(),'report_path':name},page
+ def test_failed_and_unfinished_attempts_do_not_lower_interest_order(self):
+  one,two=self.pair();value=c.state(self.root)
+  value['threads'][0].update(visits=3,last_followed_at=(self.now+timedelta(hours=3)).isoformat())
+  value['runs']=[{'id':'failed-'+status,'thread_id':one['id'],'status':status,'started_at':(self.now+timedelta(hours=3)).isoformat(),**({'outcome':'blocked'}if status=='finished'else{})}for status in ('interrupted','started','finished')]
+  c.atomic(self.root/'data/curiosity/state.json',value);before=(self.root/'data/curiosity/state.json').read_bytes()
+  agenda=c.agenda(self.root,self.now+timedelta(hours=6));self.assertEqual([r['id']for r in agenda['threads']],[one['id'],two['id']])
+  self.assertEqual(agenda['threads'][0]['read_visits'],0);self.assertIsNone(agenda['threads'][0]['last_read_at'])
+  self.assertEqual(agenda['threads'][0]['visits'],3);self.assertEqual(before,(self.root/'data/curiosity/state.json').read_bytes())
+ def test_completed_registered_reading_affects_order_and_counts_once_per_run(self):
+  one,two=self.pair();run,page=self.reading(one);value=c.state(self.root)
+  value['runs']=[run,run.copy()];c.atomic(self.root/'data/curiosity/state.json',value)
+  visited=c.load(self.root/'data/surf-state.json',{'visited':[]})['visited'];c.atomic(self.root/'data/surf-state.json',{'visited':[*visited,page.copy(),{'report':page['report'],'url':page['url'],'read_at':'bad'}]})
+  history=c.reading_followups(self.root,value,self.now+timedelta(hours=6));self.assertEqual(history[one['id']]['read_visits'],1)
+  agenda=c.agenda(self.root,self.now+timedelta(hours=6));self.assertEqual(agenda['threads'][0]['id'],two['id'])
+  self.assertEqual(agenda['threads'][1]['last_read_at'],page['read_at'])
+ def test_unconfirmed_report_or_old_future_private_and_mismatched_page_do_not_count(self):
+  one,_=self.pair();run,page=self.reading(one);value={'threads':[],'runs':[run]};now=self.now+timedelta(hours=6)
+  cases=[{**page,'read_at':(self.now-timedelta(days=1)).isoformat()},
+         {**page,'read_at':(now+timedelta(minutes=1)).isoformat()},
+         {**page,'read_at':'2026-10-27T15:02:00'},
+         {**page,'url':'http://127.0.0.1/private'},
+         {**page,'report':'reports/2026-10-27/other-surf.md'},
+         {**page,'url':'https://example.org/not-in-report'}]
+  for p in cases:
+   with self.subTest(page=p):
+    c.atomic(self.root/'data/surf-state.json',{'visited':[p]});self.assertEqual(c.reading_followups(self.root,value,now),{})
+  (self.root/run['report_path']).unlink();c.atomic(self.root/'data/surf-state.json',{'visited':[page]})
+  self.assertEqual(c.reading_followups(self.root,value,now),{})
+ def test_blocked_outcome_and_future_completion_do_not_count_as_reading(self):
+  one,_=self.pair();run,_=self.reading(one);now=self.now+timedelta(hours=6)
+  for change in ({'outcome':'blocked'},{'status':'interrupted'},{'finished_at':(now+timedelta(minutes=1)).isoformat()},{'finished_at':'2026-10-27T15:05:00'}):
+   with self.subTest(change=change):self.assertEqual(c.reading_followups(self.root,{'runs':[{**run,**change}]},now),{})
+ def test_existing_submission_clock_tolerance_is_kept_without_reading_the_future(self):
+  one,_=self.pair();run,page=self.reading(one);end=datetime.fromisoformat(run['finished_at']);page['read_at']=(end+timedelta(seconds=45)).isoformat()
+  c.atomic(self.root/'data/surf-state.json',{'visited':[page]})
+  self.assertEqual(c.reading_followups(self.root,{'runs':[run]},end+timedelta(seconds=30)),{})
+  self.assertEqual(c.reading_followups(self.root,{'runs':[run]},end+timedelta(minutes=1))[one['id']]['read_visits'],1)
+ def test_internal_report_alias_is_supported_but_external_report_root_is_not(self):
+  one,_=self.pair();run,_=self.reading(one);now=self.now+timedelta(hours=6)
+  (self.root/'reports').rename(self.root/'archived-reports');(self.root/'reports').symlink_to(self.root/'archived-reports',target_is_directory=True)
+  self.assertEqual(c.reading_followups(self.root,{'runs':[run]},now)[one['id']]['read_visits'],1)
+  with tempfile.TemporaryDirectory()as external:
+   (self.root/'reports').unlink();(self.root/'reports').symlink_to(external,target_is_directory=True)
+   self.assertEqual(c.reading_followups(self.root,{'runs':[run]},now),{})
+ def test_real_block_and_boredom_still_keep_the_existing_cooldown_and_stop(self):
+  one,_=self.pair();run=c.begin(self.root,one['id'],self.now)['run']
+  c.finish(self.root,{'run_id':run['id'],'outcome':'blocked','reason':'公开入口目前要求登录，未能继续阅读。','report_path':self.obs['report_path']},self.now+timedelta(minutes=5))
+  self.assertNotIn(one['id'],[r['id']for r in c.agenda(self.root,self.now+timedelta(hours=3))['threads']])
+  self.assertIn(one['id'],[r['id']for r in c.agenda(self.root,self.now+timedelta(hours=9))['threads']])
 if __name__=='__main__':unittest.main()

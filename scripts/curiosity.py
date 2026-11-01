@@ -74,6 +74,42 @@ def available(value, now, root):
     return True, ''
 
 
+def reading_followups(root,value,now):
+    """Completed reading, rather than failed attempts, informs revisit fatigue."""
+    from fish_conversation import public_url
+    root=Path(root).resolve();report_root=(root/'reports').resolve()
+    if not report_root.is_relative_to(root):return {}
+    visited=load(root/'data/surf-state.json',{'visited':[]}).get('visited',[])
+    by_report={};reports={};result={};counted=set()
+    for page in visited:
+        if isinstance(page,dict)and isinstance(page.get('report'),str):by_report.setdefault(page['report'],[]).append(page)
+    def at(value):
+        parsed=datetime.fromisoformat(value.replace('Z','+00:00'))
+        if parsed.tzinfo is None:raise ValueError('Reading time needs a timezone.')
+        return parsed
+    for run in value['runs']:
+        if run.get('status')!='finished'or run.get('outcome')not in ('want_more','satisfied','bored')or not run.get('thread_id'):continue
+        try:
+            ident=run['id']
+            if not isinstance(ident,str)or ident in counted:continue
+            start=at(run['started_at']);end=at(run['finished_at']);name=run['report_path']
+            if not start<=end<=now or not isinstance(name,str)or Path(name).is_absolute():continue
+            file=(root/name).resolve()
+            if not file.is_relative_to(report_root)or not file.is_file()or file.stat().st_size>512_000:continue
+            if name not in reports:reports[name]=file.read_text()
+            times=[]
+            for page in by_report.get(name,[]):
+                try:
+                    seen=at(page['read_at'])
+                    if public_url(page.get('url'))and page['url']in reports[name]and start-timedelta(minutes=2)<=seen<=end+timedelta(seconds=60)and seen<=now:times.append(seen)
+                except (ValueError,TypeError,KeyError,AttributeError):continue
+            if not times:continue
+            latest=max(times);row=result.setdefault(run['thread_id'],{'read_visits':0,'last_read_at':latest})
+            row['read_visits']+=1;row['last_read_at']=max(row['last_read_at'],latest);counted.add(ident)
+        except (ValueError,TypeError,KeyError,OSError,AttributeError):continue
+    return result
+
+
 def agenda(root, now=None):
     now = clock(now)
     value = state(root)
@@ -82,9 +118,12 @@ def agenda(root, now=None):
     try:valid={v['id']for v in verified_threads(root,now)}
     except (ValueError,TypeError,KeyError,OSError):valid=set()
     candidates = [v for v in value['threads'] if v['id']in valid and v['status'] == 'open' and datetime.fromisoformat(v['expires_at']) > now and (not v.get('snoozed_until') or datetime.fromisoformat(v['snoozed_until']) <= now)]
+    history=reading_followups(root,value,now)
+    candidates=[{**item,'read_visits':history.get(item['id'],{}).get('read_visits',0),
+                 'last_read_at':history[item['id']]['last_read_at'].isoformat()if item['id']in history else None}for item in candidates]
     def score(item):
-        age = min(7, (now - datetime.fromisoformat(item.get('last_followed_at') or item['created_at'])).total_seconds() / 86400)
-        return item['interest'] * 2 + age - item.get('visits', 0) * .35
+        age = min(7, max(0,(now - datetime.fromisoformat(item['last_read_at'] or item['created_at'])).total_seconds() / 86400))
+        return item['interest'] * 2 + age - item['read_visits'] * .35
     candidates.sort(key=score, reverse=True)
     # These are quotations from real observations, not user preferences or fixed identity.
     evidence = recent_material(root,now)
