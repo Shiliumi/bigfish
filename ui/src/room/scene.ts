@@ -6,6 +6,7 @@ import { createFrameLoop } from './frame-loop.mjs'
 import { roomFrustum } from './environment.mjs'
 import { weatherParticles, precipitationPosition } from './precipitation.mjs'
 import { defaultLayout,objects,surfaces,placeObject,type Layout,type ObjectId } from './layout.mjs'
+import {roomItems} from './model.mjs'
 
 type Options = {select:(id:string)=>void; project:(x:number,y:number,size:number)=>void; lost:()=>void; restored:()=>void;move?:(layout:Layout)=>void;notice?:(text:string)=>void}
 
@@ -39,7 +40,7 @@ export function createRoom(host:HTMLDivElement, options:Options) {
   }
   const sphere = (parent:T.Object3D,r:number,x:number,y:number,z:number,m:T.Material) => mesh(parent,new T.SphereGeometry(r,20,12),m,x,y,z)
   const cylinder = (parent:T.Object3D,top:number,bottom:number,h:number,x:number,y:number,z:number,m:T.Material) => mesh(parent,new T.CylinderGeometry(top,bottom,h,28),m,x,y,z)
-  function group(id:string) { const g = new T.Group(); g.userData.slot=id; scene.add(g); targets.push(g); return g }
+  function group(id:string) { if(!Object.hasOwn(roomItems,id))throw Error('房间物品缺少描述');const g = new T.Group(); g.userData.slot=id;g.userData.description=roomItems[id];scene.add(g); targets.push(g); return g }
 
   // Open dollhouse walls; the window is a real opening rather than an overlay on a wall.
   box(scene,7.3,.28,6.3,0,-.19,0,mat('#c4b5a1'),.08)

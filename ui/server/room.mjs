@@ -3,21 +3,25 @@ import path from 'node:path';
 import {createHash,randomUUID} from 'node:crypto';
 import {defaultLayout,validateLayout,layoutCaption,objects,placeObject} from '../src/room/layout.mjs';
 import {validatePhoto} from './room-png.mjs';
+import {describeRoom,validateAtmosphere} from '../src/room/model.mjs';
 const error=(text,status=400)=>Object.assign(new Error(text),{status});
 const digest=value=>createHash('sha256').update(value).digest('hex');
 export function createRoomStore(root){
   const folder=path.join(root,'data/room'),file=path.join(folder,'state.json');let pending=Promise.resolve();
   const locked=fn=>{const task=pending.then(fn);pending=task.catch(()=>{});return task;};
-  async function load(){try{const s=JSON.parse(await readFile(file,'utf8'));if(s.schema!==1||!Number.isSafeInteger(s.revision)||s.revision<0||!Array.isArray(s.history)||!Array.isArray(s.receipts)||!Array.isArray(s.photos))throw Error();validateLayout(s.layout);s.locks??={cup:false,book:false,cushion:false};s.actions??=[];if(Object.keys(s.locks).sort().join()!=='book,cup,cushion'||Object.values(s.locks).some(v=>typeof v!=='boolean')||!Array.isArray(s.actions))throw Error();return s;}catch(e){if(e.code==='ENOENT')return {schema:1,revision:0,layout:defaultLayout(),history:[],receipts:[],photos:[],locks:{cup:false,book:false,cushion:false},actions:[]};throw error('小屋存档暂时无法读取，原文件已保留。',503);}}
+  async function load(){try{const s=JSON.parse(await readFile(file,'utf8'));if(s.schema!==1||!Number.isSafeInteger(s.revision)||s.revision<0||!Array.isArray(s.history)||!Array.isArray(s.receipts)||!Array.isArray(s.photos))throw Error();validateLayout(s.layout);if(s.environment!=null)validateAtmosphere(s.environment);if(s.environment_revision!==undefined&&(!Number.isSafeInteger(s.environment_revision)||s.environment_revision<0))throw Error();s.locks??={cup:false,book:false,cushion:false};s.actions??=[];if(Object.keys(s.locks).sort().join()!=='book,cup,cushion'||Object.values(s.locks).some(v=>typeof v!=='boolean')||!Array.isArray(s.actions))throw Error();return s;}catch(e){if(e.code==='ENOENT')return {schema:1,revision:0,layout:defaultLayout(),history:[],receipts:[],photos:[],locks:{cup:false,book:false,cushion:false},actions:[]};throw error('小屋存档暂时无法读取，原文件已保留。',503);}}
   async function save(s){await mkdir(folder,{recursive:true,mode:0o700});const temp=file+'.'+randomUUID()+'.tmp';try{await writeFile(temp,JSON.stringify(s),{mode:0o600});await rename(temp,file);}finally{await unlink(temp).catch(()=>{});}}
   const publicPhoto=p=>({id:p.id,caption:p.caption,created_at:p.created_at,view:p.view,revision:p.revision,width:p.width,height:p.height,image_url:'/api/room/photos/'+p.id+'/image'});
-  const snapshot=s=>({revision:s.revision,layout:s.layout,locks:s.locks,can_undo:s.history.length>0,photos:s.photos.slice(-24).reverse().map(publicPhoto),actions:s.actions.slice(-8).reverse()});
+  const snapshot=s=>({revision:s.revision,layout:s.layout,locks:s.locks,can_undo:s.history.length>0,photos:s.photos.slice(-24).reverse().map(publicPhoto),actions:s.actions.slice(-8).reverse(),environment:s.environment??null,environment_revision:s.environment_revision??0});
   function action(s,actor,id,from,to,operation_id){const value={id:'ra-'+digest(operation_id+id).slice(0,24),actor,object:id,from,to,revision:s.revision,created_at:new Date().toISOString()};s.actions.push(value);s.actions=s.actions.slice(-100);return value;}
   function receipt(s,data,fingerprint){if(typeof data.operation_id!=='string'||!/^[a-f0-9-]{36}$/.test(data.operation_id))throw error('请求标识不正确。');const old=s.receipts.find(r=>r.id===data.operation_id);if(old){if(old.hash!==fingerprint)throw error('同一请求的内容发生了变化。',409);return old;}}
   function revision(s,data){if(!Number.isSafeInteger(data.revision)||data.revision!==s.revision)throw error('房间布置已更新，请重新读取后再操作。',409);}
   function record(s,data,hash,extra={}){s.receipts.push({id:data.operation_id,hash,...extra});s.receipts=s.receipts.slice(-200);}
   return {
     snapshot:()=>locked(async()=>snapshot(await load())),
+    context:()=>locked(async()=>describeRoom(snapshot(await load()))),
+    atmosphere:()=>locked(async()=>{const s=await load();return {environment:s.environment??null,revision:s.environment_revision??0};}),
+    setAtmosphere:data=>locked(async()=>{let environment;try{environment=validateAtmosphere(data?.environment);}catch(e){throw error(e.message);}const s=await load();if(!Number.isSafeInteger(data.revision)||data.revision!==(s.environment_revision??0))throw error('房间氛围已更新，请重新读取。',409);s.environment=environment;s.environment_revision=(s.environment_revision??0)+1;await save(s);return {environment,revision:s.environment_revision};}),
     update:data=>locked(async()=>{
       if(!data||typeof data!=='object'||Array.isArray(data))throw error('布置请求格式不正确。');
       if(!['save','undo','reset','lock'].includes(data.action))throw error('布置操作不支持。');

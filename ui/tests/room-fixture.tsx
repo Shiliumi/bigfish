@@ -1,4 +1,6 @@
 import {createRoot} from 'react-dom/client'
+import {useState} from 'react'
+import {useRoomRenderer} from '../src/room/useRoomRenderer'
 import RoomPage from '../src/room/RoomPage'
 import '../src/styles.css'
 import '../src/responsive.css'
@@ -31,8 +33,8 @@ function contextLoss() {
   if(!extension){document.getElementById('context-note')!.textContent='此环境不提供上下文丢失扩展';return}
   extension.loseContext();setTimeout(()=>extension.restoreContext(),1200)
 }
-createRoot(document.getElementById('root')!).render(<main style={{height:'100dvh',display:'flex',flexDirection:'column'}}>
-  <div className="workspace-page"><RoomPage onNavigate={()=>{}}/>
+function Fixture(){const [room,setRoom]=useState(true);useRoomRenderer(true);return <main style={{height:'100dvh',display:'flex',flexDirection:'column'}}>
+  <div className="workspace-page"><button onClick={()=>setRoom(v=>!v)}>{room?'测试切到聊天（房间关闭）':'回到小屋'}</button>{room?<RoomPage onNavigate={()=>setRoom(false)}/>:<p>模拟聊天中，小屋页面已卸载。独立拍照服务仍应按需渲染。</p>}
     <details style={{marginTop:20}}><summary>隔离测试记录（虚构状态）</summary>
       <button onClick={visibility}>模拟隐藏 / 恢复</button><span id="visibility-note"/>
       <button onClick={contextLoss}>模拟图形上下文丢失 / 恢复</button><span id="context-note"/>
@@ -40,4 +42,5 @@ createRoot(document.getElementById('root')!).render(<main style={{height:'100dvh
       <output id="drag-trace" style={{display:'block',fontSize:10,overflowWrap:'anywhere'}}/>
     </details>
   </div>
-</main>)
+</main>}
+createRoot(document.getElementById('root')!).render(<Fixture/>)

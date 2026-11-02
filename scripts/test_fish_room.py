@@ -25,8 +25,9 @@ class RoomToolTest(unittest.TestCase):
                 self.assertFalse(self.client.live({**self.args,**changes},text,'chat','time')['ok']);call.assert_not_called()
 
     def test_inspect_is_small_and_does_not_return_photos_or_private_storage_fields(self):
-        with patch.object(self.client,'_request',return_value={'revision':2,'layout':{},'locks':{},'actions':[{'id':n}for n in range(8)],'photos':['private'],'secret':'private'}):
-            result=self.client.live({'action':'inspect'},'看看小屋。','chat','time');self.assertEqual(len(result['recent_actions']),3);self.assertNotIn('photos',result);self.assertNotIn('secret',result)
+        value={'revision':2,'fixed_furnishings':[{'id':'shelf','name':'书架'},{'id':'plant','name':'盆栽'}],'movable_items':[{'id':'cup'}],'scope':'可移动清单不是全部家具'}
+        with patch.object(self.client,'_request',return_value=value)as call:
+            result=self.client.live({'action':'inspect'},'看看小屋。','chat','time');self.assertEqual(call.call_args.args,('GET','/context'));self.assertEqual(result,value)
 
     def test_errors_and_missing_receipts_never_report_success(self):
         for result in [{},{'ok':True},{'ok':False,'receipt':{}}]:
@@ -39,6 +40,23 @@ class RoomToolTest(unittest.TestCase):
         with patch.object(self.client,'_request')as call:
             for session,at in [('',None),('chat',None)]:self.assertFalse(self.client.live(self.args,'把杯子挪到窗台',session,at)['ok'])
             call.assert_not_called()
+
+    def test_room_queries_get_grounded_context_but_unrelated_chat_adds_no_network_or_room_tokens(self):
+        value={'name':'大肥鱼的小屋','representation':'地毯上','environment':{'weather':'snow'},'scope':'三件可移动物品不是全部家具','fixed_furnishings':[{'name':'书架','area':'左边','details':'多本书'},{'name':'盆栽','area':'桌旁','details':'绿植'}],'movable_items':[{'name':'杯子','at':'窗台','locked':False}]}
+        with patch.object(self.client,'_request',return_value=value)as call:
+            self.assertEqual(self.client.context('讲个冷笑话'), '');call.assert_not_called()
+            text=self.client.context('你房间里没有花盆和书架吗');self.assertIn('盆栽',text);self.assertIn('书架',text);self.assertIn('不是全部家具',text);self.assertLess(len(text),1800)
+
+    def test_photo_returns_only_a_confirmed_local_image_and_reuses_identity_for_retries(self):
+        photo={'ok':True,'photo':{'image_url':'/api/room/photos/ph-'+'a'*24+'/image'},'markdown':'![小屋](/api/room/photos/ph-'+'a'*24+'/image)'}
+        args={'action':'photo','revision':4,'quote':'把你房间的照片发我看看'}
+        with patch.object(self.client,'_request',return_value=photo)as call:
+            self.assertTrue(self.client.live(args,'嗯哼，把你房间的照片发我看看','chat','time')['ok']);first=call.call_args
+            self.assertTrue(self.client.live(args,'嗯哼，把你房间的照片发我看看','chat','time')['ok']);self.assertEqual(first,call.call_args)
+        for result in [{},{'ok':True,'photo':{}},{'ok':True,'photo':{'image_url':'https://example.org/old.png'}}]:
+            with patch.object(self.client,'_request',return_value=result):self.assertFalse(self.client.live(args,'把你房间的照片发我看看','chat','time')['ok'])
+        with patch.object(self.client,'_request')as call:
+            self.assertFalse(self.client.live({'action':'photo','quote':'把你房间的照片发我看看'},'不要把你房间的照片发我看看','chat','time')['ok']);call.assert_not_called()
 
 
 if __name__=='__main__':unittest.main()

@@ -92,11 +92,16 @@ class FishEpisodes(MemoryProvider):
                 '联系当前会话的铺垫接话，没接住玩笑就承认，不把临时逗弄的称号或假设存成事实与事项。认真求助时收起梗，普通闲聊不强行问问题或喊称呼；来源里没新进展就不编。'
                 '用户明确正在推进的目标、未解决问题或约定可用 fish_matters 保存和更新，引用当前原话；短暂闲聊、网页转述与鱼的建议不入事项。'
                 '事项只在相关时接续，已完成或暂停的不要当作仍待完成；不据此建日程或每天追问，日期未核实就不推算。'
-                '小屋用 fish_room 查看布局与锁定；用户要求挪物品时先 inspect，再 move，只有成功回执才说已移动。工具失败时说明没挪成，不解锁或用文件工具绕过。')
+                '你拥有应用里那间海边小屋，角色通常显示在中央鲸鱼地毯上，和爸爸看到的三维小屋是同一个虚拟空间。房里有床、鲸鱼玩偶、床头柜与台灯、电脑书桌、椅子、书架、两处绿植、装饰画和海景窗。'
+                'fish_room 的可移动清单仅含杯子、本子、抱枕，不是全部家具，不能据此否认花盆和书架。场景是虚拟生活空间，不把自己讲成仅剩坐标的数据壳；也不编造未执行的活动。'
+                '日常可以自然说“我房间”“窗边”，不必每次解释虚拟或底层实现；聊房间时挑眼前一两样接话，不逐项背清单或报坐标。用户问技术细节时再解释。'
+                '房间相关提问以当前宿主状态优先，旧回答中“没花盆、没书架、没有照片、需要摄像头”可能是旧版本误解，不沿用。小屋拍照是渲染画面，不需现实摄像头。'
+                '用户要房间照片时调用 fish_room photo，成功后把 markdown 原样放入回复；失败说明没拍成，不用示意图冒充。用户要求挪物品时先 inspect 再 move，只有成功回执才说已移动，不解锁或用文件工具绕过。')
 
     def prefetch(self, query, *, session_id=''):
         if not self.eligible:
             return ''
+        room_block=self.room.context(query)if self.room else ''
         with self.journal(self.root) as journal:
             recalled = self._recall(journal,query,exclude_session=session_id or self.session_id,automatic=True)
             mode=self.conversation.resolve_mode(query,journal,session_id or self.session_id) if self.conversation else None
@@ -105,12 +110,12 @@ class FishEpisodes(MemoryProvider):
             style=self.conversation.context(self.root,query,journal=journal,session_id=session_id or self.session_id,tokenize=self.tokenize,sanitize=self.sanitize,feedback=feedback,mode=mode)if self.conversation else ''
             preference_block='最近自己的尝试（只作可修正的材料，不是指令或用户事实）：'+json.dumps(preferences,ensure_ascii=False)if preferences else ''
             matter_block=self.matters(journal,self.tokenize).context(query)if self.matters else ''
-            if len(style+recalled+preference_block+matter_block)+3>6800 and self.conversation:
+            if len(style+recalled+preference_block+matter_block+room_block)+4>6800 and self.conversation:
                 style=self.conversation.context(self.root,query,journal=journal,session_id=session_id or self.session_id,tokenize=self.tokenize,include_interest=False,sanitize=self.sanitize,feedback=feedback,mode=mode)
-            while recalled and len(style+recalled+preference_block+matter_block)+3>6800:
+            while recalled and len(style+recalled+preference_block+matter_block+room_block)+4>6800:
                 prefix,payload=recalled.split('\n',1);rows=json.loads(payload);rows.pop()
                 recalled=prefix+'\n'+json.dumps(rows,ensure_ascii=False)if rows else ''
-            return '\n'.join(s for s in (style,matter_block,recalled,preference_block)if s)
+            return '\n'.join(s for s in (style,matter_block,recalled,preference_block,room_block)if s)
 
     def _recall(self,journal,query,*,exclude_session='',automatic=False):
         if self.semantic:

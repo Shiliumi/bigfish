@@ -6,6 +6,7 @@ import { createRoom, type RoomScene } from './scene'
 import { roomActivity, roomEnvironment } from './environment.mjs'
 import {objects,surfaces,placeObject,type ObjectId} from './layout.mjs'
 import {useRoomLayout} from './useRoomLayout'
+import {useRoomAtmosphere} from './atmosphere'
 import type {RoomPhoto} from './types'
 import './room.css'
 
@@ -26,7 +27,6 @@ const slots:Record<string,{title:string;description:string;destination?:Destinat
   plant:{title:'窗边的绿意',description:'给海边小屋添一点绿。'},
   picture:{title:'墙上的小画',description:'给房间留一点海的颜色。'},
 }
-function preference(key:string, choices:string[], fallback:string) {try {const v=localStorage.getItem(key);return choices.includes(v||'')?v!:fallback}catch{return fallback}}
 function RoomPage({onNavigate,onAttachPhoto}:{onNavigate:(page:Destination)=>void;onAttachPhoto?:(photo:RoomPhoto)=>void}) {
   const [editing,setEditing]=useState(false),[taking,setTaking]=useState(false),[photo,setPhoto]=useState<RoomPhoto|null>(null),[notice,setNotice]=useState('')
   const room=useRoomLayout(!editing&&!taking)
@@ -34,9 +34,10 @@ function RoomPage({onNavigate,onAttachPhoto}:{onNavigate:(page:Destination)=>voi
   const photoDialog=useRef<HTMLElement|null>(null)
   const host=useRef<HTMLDivElement>(null), character=useRef<HTMLDivElement>(null), engine=useRef<RoomScene|null>(null)
   const [generation,setGeneration]=useState(0), [failed,setFailed]=useState(false), [contextLost,setContextLost]=useState(false)
-  const [period,setPeriod]=useState(()=>preference('fish.room.period',['auto','day','dusk','night'],'auto'))
-  const [weather,setWeather]=useState(()=>preference('fish.room.weather',['clear','rain','snow'],'clear'))
-  const [lamp,setLamp]=useState(()=>preference('fish.room.lamp',['on','off'],'on')==='on')
+  const atmosphere=useRoomAtmosphere(),{period,weather,lamp}=atmosphere.value
+  const setPeriod=(period:string)=>atmosphere.setValue(v=>({...v,period:period as typeof v.period}))
+  const setWeather=(weather:string)=>atmosphere.setValue(v=>({...v,weather:weather as typeof v.weather}))
+  const setLamp=(update:(lamp:boolean)=>boolean)=>atmosphere.setValue(v=>({...v,lamp:update(v.lamp)}))
   const [settings,setSettings]=useState(false), [selected,setSelected]=useState<string|null>(null)
   const [manifest,setManifest]=useState<Manifest|null>(null), [activity,setActivity]=useState({animation:'idle',label:'正在看看她在忙什么…'})
   const [visible,setVisible]=useState(()=>!document.hidden&&(window as any).__FISH_WINDOW_VISIBLE__!==false)
@@ -65,7 +66,6 @@ function RoomPage({onNavigate,onAttachPhoto}:{onNavigate:(page:Destination)=>voi
     void poll();const timer=setInterval(()=>void poll(),15_000);return()=>{controller.abort();clearInterval(timer)}
   },[visible])
   useEffect(()=>{const controller=new AbortController();fetch('/pet/manifest.json',{signal:controller.signal}).then(r=>{if(!r.ok)throw Error();return r.json()}).then(setManifest).catch(()=>{});return()=>controller.abort()},[])
-  useEffect(()=>{try{localStorage.setItem('fish.room.period',period);localStorage.setItem('fish.room.weather',weather);localStorage.setItem('fish.room.lamp',lamp?'on':'off')}catch{}},[period,weather,lamp])
   useEffect(()=>{if(!greeting)return;const timer=setTimeout(()=>setGreeting(false),(manifest?.animations.greeting?.duration||10)*1000);return()=>clearTimeout(timer)},[greeting,manifest])
   useEffect(()=>{
     if(!photo)return;const previous=document.activeElement as HTMLElement|null;photoDialog.current?.querySelector('button')?.focus()
@@ -75,7 +75,7 @@ function RoomPage({onNavigate,onAttachPhoto}:{onNavigate:(page:Destination)=>voi
   function place(surface:string){if(!selected||!(selected in objects))return;const id=selected as ObjectId,[x,z]=objects[id].presets[surface];try{room.setDraft(placeObject(room.draft,id,{surface,x,z,rotation:room.draft[id].rotation}));room.setError('')}catch(e){room.setError((e as Error).message)}}
   function rotate(){if(!selected||!(selected in objects))return;const id=selected as ObjectId;try{room.setDraft(placeObject(room.draft,id,{...room.draft[id],rotation:(room.draft[id].rotation+90)%360}));room.setError('')}catch(e){room.setError((e as Error).message)}}
   async function capture(view:'room'|'window'){
-    if(!room.saved||room.dirty||taking||room.busy)return;setTaking(true);room.setError('')
+    if(!room.saved||room.dirty||taking||room.busy||!atmosphere.ready)return;setTaking(true);room.setError('')
     try{
       let source=character.current?.querySelector('video,img') as HTMLVideoElement|HTMLImageElement|null
       if(!source||source instanceof HTMLVideoElement&&source.readyState<2){const fallback=new Image();fallback.src='/pet/idle-poster.png';await fallback.decode();source=fallback}
@@ -91,8 +91,8 @@ function RoomPage({onNavigate,onAttachPhoto}:{onNavigate:(page:Destination)=>voi
   return <section className="room-page" aria-label="大肥鱼的小屋">
     <header className="room-heading"><div><span className="room-eyebrow">A LITTLE PLACE OF HER OWN</span><h1>大肥鱼的小屋<span>01</span></h1><p>留一扇窗，也留一点慢慢生活的空间。</p></div><button className={'room-button '+(settings?'selected':'')} aria-expanded={settings} onClick={()=>setSettings(v=>!v)}><SlidersHorizontal size={16}/>房间氛围</button></header>
     {settings&&<div className="room-settings"><div role="group" aria-label="小屋时段">{[{id:'auto',name:'跟随时间',icon:Sun},{id:'day',name:'白天',icon:Sun},{id:'dusk',name:'黄昏',icon:Sunset},{id:'night',name:'夜晚',icon:Moon}].map(x=><button key={x.id} aria-pressed={period===x.id} onClick={()=>setPeriod(x.id)}><x.icon size={15}/>{x.name}</button>)}</div><div role="group" aria-label="小屋天气氛围">{[{id:'clear',name:'晴',icon:Sun},{id:'rain',name:'雨',icon:CloudRain},{id:'snow',name:'雪',icon:Snowflake}].map(x=><button key={x.id} aria-pressed={weather===x.id} onClick={()=>setWeather(x.id)}><x.icon size={15}/>{x.name}</button>)}</div><span>天气为小屋氛围 · 自动时段按北京时间</span></div>}
-    <div className="room-actions"><button className={'room-button '+(editing?'selected':'')} aria-pressed={editing} onClick={()=>setEditing(v=>!v)} disabled={!room.saved||room.busy||taking}><Move size={16}/>{editing?'结束布置':'布置小屋'}</button>{(editing||room.dirty)&&<><button className="room-button" disabled={!room.dirty||room.busy||taking} onClick={()=>void room.update('save')}><Save size={15}/>{room.busy?'正在保存…':'保存布置'}</button><button className="room-button" disabled={!room.saved?.can_undo||room.dirty||room.busy||taking} onClick={()=>void room.update('undo')}><Undo2 size={15}/>撤销上次保存</button><button className="room-text-link" disabled={room.busy} onClick={()=>void room.reload()}>读取已保存布置</button><button className="room-text-link" disabled={room.busy||taking} onClick={()=>void room.update('reset')}>恢复默认</button></>}<div className="room-photo-actions"><button className="room-button" disabled={!room.saved||room.dirty||taking||room.busy||failed||contextLost} onClick={()=>void capture('room')}><Camera size={16}/>{taking?'拍照中…':'拍张全景'}</button><button className="room-button" disabled={!room.saved||room.dirty||taking||room.busy||failed||contextLost} onClick={()=>void capture('window')}>拍窗边</button></div></div>
-    {(room.error||notice||room.dirty)&&<div className="room-notice" role={room.error?'alert':'status'}>{room.error||notice||'布置还没有保存，草稿会留在本机。保存后就可以拍照。'}{room.error&&<button onClick={()=>void room.reload()} disabled={room.busy}>重新读取</button>}</div>}
+    <div className="room-actions"><button className={'room-button '+(editing?'selected':'')} aria-pressed={editing} onClick={()=>setEditing(v=>!v)} disabled={!room.saved||room.busy||taking}><Move size={16}/>{editing?'结束布置':'布置小屋'}</button>{(editing||room.dirty)&&<><button className="room-button" disabled={!room.dirty||room.busy||taking} onClick={()=>void room.update('save')}><Save size={15}/>{room.busy?'正在保存…':'保存布置'}</button><button className="room-button" disabled={!room.saved?.can_undo||room.dirty||room.busy||taking} onClick={()=>void room.update('undo')}><Undo2 size={15}/>撤销上次保存</button><button className="room-text-link" disabled={room.busy} onClick={()=>void room.reload()}>读取已保存布置</button><button className="room-text-link" disabled={room.busy||taking} onClick={()=>void room.update('reset')}>恢复默认</button></>}<div className="room-photo-actions"><button className="room-button" disabled={!room.saved||room.dirty||taking||room.busy||failed||contextLost||!atmosphere.ready} onClick={()=>void capture('room')}><Camera size={16}/>{taking?'拍照中…':'拍张全景'}</button><button className="room-button" disabled={!room.saved||room.dirty||taking||room.busy||failed||contextLost||!atmosphere.ready} onClick={()=>void capture('window')}>拍窗边</button></div></div>
+    {(room.error||atmosphere.error||notice||room.dirty)&&<div className="room-notice" role={room.error?'alert':'status'}>{room.error||atmosphere.error||notice||'布置还没有保存，草稿会留在本机。保存后就可以拍照。'}{room.error&&<button onClick={()=>void room.reload()} disabled={room.busy}>重新读取</button>}</div>}
     {editing&&<div className="room-edit-palette" role="group" aria-label="选择要布置的物品">{(Object.keys(objects) as ObjectId[]).map(id=><button key={id} aria-pressed={selected===id} onClick={()=>setSelected(id)}>{objects[id].label}</button>)}<span>可以拖动物品，或点物品选择放置位置。</span></div>}
     <div className="room-card">
       <div className="room-scene-label"><span className="room-dot"/>{sceneEnvironment.label}<span className="room-scene-number">海边小屋</span></div>

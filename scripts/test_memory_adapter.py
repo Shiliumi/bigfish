@@ -28,6 +28,8 @@ class AdapterTest(unittest.TestCase):
         self.provider=module.FishEpisodes()
     def initialize(self,scope='primary'):
         self.provider.initialize('chat-new',hermes_home=str(self.root/'.hermes'),agent_context=scope)
+        # Unit profiles never inspect the real user's running room service.
+        if self.provider.room:self.provider.room._request=lambda *a,**k:(_ for _ in ()).throw(OSError('isolated room unavailable'))
     def test_tool_routes_are_advertised_before_initialization_but_cannot_execute(self):
         self.assertEqual({s['name']for s in self.provider.get_tool_schemas()},{'fish_recall','fish_correct_memory','fish_matters','fish_room'})
         self.assertIn('error',json.loads(self.provider.handle_tool_call('fish_recall',{'query':'积木'})))
@@ -94,6 +96,13 @@ class AdapterTest(unittest.TestCase):
         with patch.object(self.provider.room,'live')as action:
             self.assertIn('error',json.loads(self.provider.handle_tool_call('fish_room',{'action':'move'})));action.assert_not_called()
         self.initialize('cron');self.assertEqual(self.provider.get_tool_schemas(),[])
+
+    def test_room_host_context_and_photo_instructions_reach_primary_chat_without_rewriting_old_memories(self):
+        self.initialize();self.provider.sync_turn('你房间里有什么？','我这儿没有书架。')
+        with patch.object(self.provider.room,'context',return_value='当前宿主房间：有书架、盆栽，正下雪。')as context:
+            packet=self.provider.prefetch('把你房间的照片发我看看');self.assertIn('当前宿主房间：有书架、盆栽',packet);context.assert_called_once()
+        prompt=self.provider.system_prompt_block();self.assertIn('可移动清单仅含',prompt);self.assertIn('不需现实摄像头',prompt);self.assertIn('markdown 原样',prompt)
+        with Journal(self.root)as journal:self.assertEqual(journal.status()['total'],1)
 
     def test_familiar_hint_and_literal_detour_repair_reach_primary_prefetch(self):
         self.initialize()

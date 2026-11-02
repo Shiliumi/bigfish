@@ -7,6 +7,7 @@ const PreferencePanel = lazy(() => import('./PreferencePanel'))
 const MattersPanel = lazy(() => import('./MattersPanel'))
 import ModelSettings from './ModelSettings'
 import {readPhotoDraft,type RoomPhoto} from './room/types'
+import {useRoomRenderer} from './room/useRoomRenderer'
 import { Component, lazy, Suspense, memo, useCallback, useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import { ArrowDown, ArrowRight, ArrowUp, BookOpen, Brain, Check, CheckCheck, ChevronDown, ChevronLeft, ChevronRight, Clock3, Compass, Copy, ExternalLink, FileText, Globe2, Heart, House, Mail, Smile, Menu, MessageCircle, MoreHorizontal, Pause, Pencil, Play, Plus, RefreshCw, Search, Send, Settings2, Sparkles, Square, Waves, X, Zap } from 'lucide-react'
 import ReactMarkdown, { type Components } from 'react-markdown'
@@ -35,7 +36,7 @@ const scheduleLabel = (expression: string) => {
   if (parts.length === 5 && parts.slice(2).every(p => p === '*') && /^\d{1,2}$/.test(parts[0]) && /^\d{1,2}(,\d{1,2})*$/.test(parts[1]) && Number(parts[0]) < 60 && parts[1].split(',').every(h => Number(h) < 24)) return parts[1].split(',').map(h => h.padStart(2, '0') + ':' + parts[0].padStart(2, '0')).join('  /  ')
   return expression
 }
-const activityLabel: Record<string, string> = { browser_exec: '正在浏览网页', web_search: '正在寻找线索', web_extract: '正在阅读内容', memory: '正在整理记忆', read_file: '正在翻阅笔记', write_file: '正在记录发现', terminal: '正在处理任务', session_search: '正在回想我们的对话' }
+const activityLabel: Record<string, string> = { browser_exec: '正在浏览网页', web_search: '正在寻找线索', web_extract: '正在阅读内容', memory: '正在整理记忆', read_file: '正在翻阅笔记', write_file: '正在记录发现', terminal: '正在处理任务', session_search: '正在回想我们的对话',fish_room:'正在看看小屋' }
 const markdownComponents: Components = {
   table: ({ node, ...props }) => <div className="table-scroll"><table {...props} /></div>,
   img: ({ src, alt }) => <img src={src} alt={alt || '图片'} className={/^\/api\/stickers\/[a-f0-9]{16}$/.test(src || '') ? 'chat-sticker' : 'message-image'} loading="lazy" />,
@@ -66,6 +67,7 @@ export default function App() {
   const [page, setPage] = useState<Page>(() => { const saved = localStorage.getItem('fish.page'); return pages.some(p => p.id === saved) ? saved as Page : 'chat' }), [overview, setOverview] = useState<Overview | null>(null), [sessions, setSessions] = useState<Session[]>([])
   const [connected, setConnected] = useState(false), [messages, setMessages] = useState<Message[]>([]), [input, setInput] = useState(() => localStorage.getItem('fish.draft') || ''), [busy, setBusy] = useState(false), [restoring, setRestoring] = useState(false)
   const [photoDraft,setPhotoDraft]=useState<RoomPhoto|null>(readPhotoDraft)
+  useRoomRenderer(connected)
   const [curiosity,setCuriosity] = useState<Curiosity|null>(null)
   const receiveCuriosity=(value:Curiosity)=>setCuriosity(current=>current&&(current.controls?.revision??0)>(value.controls?.revision??0)?current:value)
   const [sessionModel, setSessionModel] = useState('')
