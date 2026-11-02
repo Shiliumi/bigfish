@@ -17,9 +17,11 @@
 .room-scene-number { margin-left:auto; font-size:10px; color:#9baea6; letter-spacing:2px; }
 .room-stage { position:relative; width:100%; height:clamp(350px,52vw,640px); isolation:isolate; overflow:hidden; }
 .room-stage>canvas { display:block; width:100%; height:100%; touch-action:none; }
-.room-character { position:absolute; z-index:1; transform:translate(-50%,-94%); padding:0; border:0; background:none; line-height:0; width:140px; transition:filter .2s; }
+.room-character-anchor { position:absolute; z-index:1; transform:translate(-50%,-94%); width:140px; aspect-ratio:8 / 9; }
+.room-character { position:relative; display:block; padding:0; border:0; background:none; line-height:0; width:100%; height:100%; transition:filter .2s; touch-action:manipulation; user-select:none; }
+.room-character,.room-character:active:not(:disabled) { transform:none; }
 .room-character:hover { filter:brightness(1.03); }
-.room-character .pet-movie,.room-character>img { display:block; width:100%; height:auto; pointer-events:none; }
+.room-character .pet-movie,.room-character>img { display:block; width:100%; height:100%; object-fit:contain; pointer-events:none; }
 .room-character::before { content:''; position:absolute; bottom:5%; left:30%; width:40%; height:5%; border-radius:50%; background:#3b504926; filter:blur(4px); z-index:-1; }
 .room-stage[data-period=night] .room-character .pet-movie,.room-stage[data-period=night] .room-character>img { filter:brightness(.78) saturate(.88); }
 .room-stage[data-period=dusk] .room-character .pet-movie,.room-stage[data-period=dusk] .room-character>img { filter:brightness(.94) sepia(.06); }

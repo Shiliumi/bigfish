@@ -25,7 +25,7 @@ const slots:Record<string,{title:string;description:string;destination?:Destinat
 }
 function preference(key:string, choices:string[], fallback:string) {try {const v=localStorage.getItem(key);return choices.includes(v||'')?v!:fallback}catch{return fallback}}
 function RoomPage({onNavigate}:{onNavigate:(page:Destination)=>void}) {
-  const host=useRef<HTMLDivElement>(null), character=useRef<HTMLButtonElement>(null), engine=useRef<RoomScene|null>(null)
+  const host=useRef<HTMLDivElement>(null), character=useRef<HTMLDivElement>(null), engine=useRef<RoomScene|null>(null)
   const [generation,setGeneration]=useState(0), [failed,setFailed]=useState(false), [contextLost,setContextLost]=useState(false)
   const [period,setPeriod]=useState(()=>preference('fish.room.period',['auto','day','dusk','night'],'auto'))
   const [weather,setWeather]=useState(()=>preference('fish.room.weather',['clear','rain','snow'],'clear'))
@@ -57,7 +57,7 @@ function RoomPage({onNavigate}:{onNavigate:(page:Destination)=>void}) {
   },[visible])
   useEffect(()=>{const controller=new AbortController();fetch('/pet/manifest.json',{signal:controller.signal}).then(r=>{if(!r.ok)throw Error();return r.json()}).then(setManifest).catch(()=>{});return()=>controller.abort()},[])
   useEffect(()=>{try{localStorage.setItem('fish.room.period',period);localStorage.setItem('fish.room.weather',weather);localStorage.setItem('fish.room.lamp',lamp?'on':'off')}catch{}},[period,weather,lamp])
-  useEffect(()=>{if(!greeting)return;const timer=setTimeout(()=>setGreeting(false),6500);return()=>clearTimeout(timer)},[greeting])
+  useEffect(()=>{if(!greeting)return;const timer=setTimeout(()=>setGreeting(false),(manifest?.animations.greeting?.duration||10)*1000);return()=>clearTimeout(timer)},[greeting,manifest])
   const slot=selected?slots[selected]:undefined
   return <section className="room-page" aria-label="大肥鱼的小屋">
     <header className="room-heading"><div><span className="room-eyebrow">A LITTLE PLACE OF HER OWN</span><h1>大肥鱼的小屋<span>01</span></h1><p>留一扇窗，也留一点慢慢生活的空间。</p></div><button className={'room-button '+(settings?'selected':'')} aria-expanded={settings} onClick={()=>setSettings(v=>!v)}><SlidersHorizontal size={16}/>房间氛围</button></header>
@@ -65,10 +65,11 @@ function RoomPage({onNavigate}:{onNavigate:(page:Destination)=>void}) {
     <div className="room-card">
       <div className="room-scene-label"><span className="room-dot"/>{sceneEnvironment.label}<span className="room-scene-number">海边小屋</span></div>
       <div className="room-stage" ref={host} data-period={sceneEnvironment.period}>
-        {!failed&&!contextLost&&<button ref={character} className="room-character" aria-label="摸摸大肥鱼" onClick={()=>setGreeting(v=>!v)}>
+        <div ref={character} className="room-character-anchor" hidden={failed||contextLost}>
+        <button className="room-character" aria-label="摸摸大肥鱼" onClick={()=>setGreeting(true)}>
           {greeting&&<span className="room-hello">爹，进来坐会儿？</span>}
           {manifest&&visible?<PetVideo animation={greeting?'greeting':activity.animation} manifest={manifest}/>:<img src="/pet/idle-poster.png" alt="大肥鱼"/>}
-        </button>}
+        </button></div>
         {(failed||contextLost)&&<div className="room-recovery" role="alert"><Moon size={28}/><strong>{contextLost?'小屋的画面暂停了':'小屋画面暂时没有打开'}</strong><p>可以重新打开画面，聊天和记忆仍然保留。</p><button className="room-button" onClick={()=>setGeneration(v=>v+1)}><RotateCcw size={15}/>重新打开小屋</button></div>}
         {slot&&<aside className="room-inspect" aria-label={slot.title}><button className="room-inspect-close" aria-label="关闭物品介绍" onClick={()=>setSelected(null)}><X size={16}/></button><span className="room-eyebrow">A LITTLE CORNER</span><h2>{slot.title}</h2><p>{slot.description}</p>{selected==='lamp'&&<button className="room-button" aria-pressed={lamp} onClick={()=>setLamp(v=>!v)}><Lamp size={15}/>{lamp?'关掉台灯':'打开台灯'}</button>}{slot.destination&&<button className="room-text-link" onClick={()=>onNavigate(slot.destination!)}>{slot.link}<ArrowUpRight size={15}/></button>}</aside>}
       </div>

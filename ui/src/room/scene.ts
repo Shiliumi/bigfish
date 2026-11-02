@@ -4,6 +4,7 @@ import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.j
 import type { RoomEnvironment } from './environment.mjs'
 import { createFrameLoop } from './frame-loop.mjs'
 import { roomFrustum } from './environment.mjs'
+import { weatherParticles, precipitationPosition } from './precipitation.mjs'
 
 type Options = {select:(id:string)=>void; project:(x:number,y:number,size:number)=>void; lost:()=>void; restored:()=>void}
 
@@ -152,10 +153,16 @@ export function createRoom(host:HTMLDivElement, options:Options) {
   const ground=mesh(scene,new T.PlaneGeometry(200,200),mat('#eef3f2'),0,-.35,0);ground.rotation.x=-Math.PI/2;ground.castShadow=false
 
   const particles=new T.Group();scene.add(particles)
-  const positions=new Float32Array(72*3), seeds:number[]=[]
-  for(let i=0;i<72;i++){seeds.push(((i*73)%101)/101);positions[i*3]=-1+((i*43)%101)/101*3.45;positions[i*3+1]=.95+seeds[i]*2.02;positions[i*3+2]=-3.1}
+  const seeds=weatherParticles(),positions=new Float32Array(seeds.length*3)
+  for(let i=0;i<seeds.length;i++){const p=precipitationPosition(seeds[i],0,'snow');positions.set([p.x,p.y,p.z],i*3)}
   const pg=new T.BufferGeometry();pg.setAttribute('position',new T.BufferAttribute(positions,3));geometries.add(pg)
-  const pm=new T.PointsMaterial({color:'#eff9ff',size:.032,transparent:true,opacity:.8});materials.add(pm)
+  // PointsMaterial sizes are screen pixels with an orthographic camera, not world units.
+  const snowCanvas=document.createElement('canvas');snowCanvas.width=32;snowCanvas.height=32
+  const snowContext=snowCanvas.getContext('2d')!,flake=snowContext.createRadialGradient(16,16,0,16,16,16)
+  flake.addColorStop(0,'#ffffff');flake.addColorStop(.55,'#fffffff2');flake.addColorStop(1,'#ffffff00')
+  snowContext.fillStyle=flake;snowContext.fillRect(0,0,32,32)
+  const snowTexture=new T.CanvasTexture(snowCanvas);snowTexture.colorSpace=T.SRGBColorSpace;textures.add(snowTexture)
+  const pm=new T.PointsMaterial({color:'#ffffff',size:3.6,sizeAttenuation:false,map:snowTexture,transparent:true,opacity:.95,alphaTest:.04,depthWrite:false,toneMapped:false});materials.add(pm)
   const points=new T.Points(pg,pm);points.frustumCulled=false;particles.add(points)
   const rainPositions=new Float32Array(72*6), rainGeometry=new T.BufferGeometry()
   for(let i=0;i<72;i++)rainPositions.set([positions[i*3],positions[i*3+1],-3.1,positions[i*3]-.025,positions[i*3+1]-.13,-3.1],i*6)
@@ -172,9 +179,10 @@ export function createRoom(host:HTMLDivElement, options:Options) {
   }
   function sky(env:RoomEnvironment) {
     const c=skyCanvas.getContext('2d')!, night=env.period==='night';const grad=c.createLinearGradient(0,0,0,512)
-    grad.addColorStop(0,env.sky);grad.addColorStop(1,night?'#718293':env.period==='dusk'?'#f4dfbd':'#e2ebe4');c.fillStyle=grad;c.fillRect(0,0,768,512)
-    c.fillStyle=night?'#f7edcd':'#fff2cd';c.beginPath();c.arc(580,110,night?29:38,0,Math.PI*2);c.fill()
-    if(night)for(let i=0;i<27;i++){c.fillStyle='#eff3e4';c.globalAlpha=.25+(i%4)*.16;c.beginPath();c.arc((i*137)%768,25+(i*67)%240,1+i%2,0,Math.PI*2);c.fill()}c.globalAlpha=1
+    const snow=env.weather==='snow'
+    grad.addColorStop(0,snow?(night?'#405674':'#91aabf'):env.sky);grad.addColorStop(1,night?'#718293':snow?'#c5d5db':env.period==='dusk'?'#f4dfbd':'#e2ebe4');c.fillStyle=grad;c.fillRect(0,0,768,512)
+    if(!snow){c.fillStyle=night?'#f7edcd':'#fff2cd';c.beginPath();c.arc(580,110,night?29:38,0,Math.PI*2);c.fill()}
+    if(night&&!snow)for(let i=0;i<27;i++){c.fillStyle='#eff3e4';c.globalAlpha=.25+(i%4)*.16;c.beginPath();c.arc((i*137)%768,25+(i*67)%240,1+i%2,0,Math.PI*2);c.fill()}c.globalAlpha=1
     for(let i=0;i<3;i++){c.fillStyle=night?['#647d8d','#4c697c','#3c596e'][i]:['#a0bbc0','#8babaf','#789b9e'][i];c.beginPath();c.moveTo(0,350+i*42);for(let x=0;x<=768;x+=8)c.lineTo(x,350+i*42+Math.sin(x*.008+i*1.3)*24);c.lineTo(768,512);c.lineTo(0,512);c.fill()}
     skyTexture.needsUpdate=true
   }
@@ -192,9 +200,9 @@ export function createRoom(host:HTMLDivElement, options:Options) {
     if(!active||disposed||lost)return
     weatherTime+=dt
     if(environment.weather!=='clear'){
-      for(let i=0;i<72;i++){
-        positions[i*3+1]=.98+((seeds[i]*1.99-weatherTime*(environment.weather==='snow'?.19:.9))%1.99+1.99)%1.99
-        const x=positions[i*3],y=positions[i*3+1];rainPositions.set([x,y,-3.1,x-.025,y-.13,-3.1],i*6)
+      for(let i=0;i<seeds.length;i++){
+        const {x,y,z}=precipitationPosition(seeds[i],weatherTime,environment.weather)
+        positions.set([x,y,z],i*3);rainPositions.set([x,y,z,x-.025,y-.13,z],i*6)
       }
       pg.attributes.position.needsUpdate=true
       rainGeometry.attributes.position.needsUpdate=true
@@ -227,7 +235,7 @@ export function createRoom(host:HTMLDivElement, options:Options) {
   controls.addEventListener('change',()=>{if((!active||reducedMotion.matches)&&!disposed&&!lost&&environment){fit();project();renderer.render(scene,camera)}})
   resize()
   return {
-    environment(env:RoomEnvironment, light:boolean) {environment=env;lampOn=light;scene.background=new T.Color(env.background);(ground.material as T.MeshStandardMaterial).color.set(env.background);ambient.intensity=env.ambient;sun.intensity=env.sun;sun.color.set(env.period==='dusk'?'#ffd3a3':'#fff2d8');lamp.intensity=lampOn?env.lamp:0;particles.visible=env.weather!=='clear';points.visible=env.weather==='snow';rain.visible=env.weather==='rain';pm.size=.045;sky(env);renderer.shadowMap.needsUpdate=true;render()},
+    environment(env:RoomEnvironment, light:boolean) {environment=env;lampOn=light;scene.background=new T.Color(env.background);(ground.material as T.MeshStandardMaterial).color.set(env.background);ambient.intensity=env.ambient;sun.intensity=env.sun;sun.color.set(env.period==='dusk'?'#ffd3a3':'#fff2d8');lamp.intensity=lampOn?env.lamp:0;particles.visible=env.weather!=='clear';points.visible=env.weather==='snow';rain.visible=env.weather==='rain';sky(env);renderer.shadowMap.needsUpdate=true;render()},
     active(value:boolean){if(active===value)return;active=value;loop.active(active&&!lost&&!reducedMotion.matches);if(active)resize()},
     reset(){controls.reset();render()},
     dispose(){disposed=true;active=false;loop.dispose();observer.disconnect();controls.dispose();reducedMotion.removeEventListener('change',onMotion);renderer.domElement.removeEventListener('pointerdown',onDown);renderer.domElement.removeEventListener('pointerup',onUp);renderer.domElement.removeEventListener('webglcontextlost',onLost);renderer.domElement.removeEventListener('webglcontextrestored',onRestored);textures.forEach(x=>x.dispose());materials.forEach(x=>x.dispose());geometries.forEach(x=>x.dispose());renderer.dispose();renderer.forceContextLoss();renderer.domElement.remove()},

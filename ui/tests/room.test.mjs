@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {roomEnvironment,roomActivity,roomFrustum} from '../src/room/environment.mjs';
 import {createFrameLoop} from '../src/room/frame-loop.mjs';
 import {OrthographicCamera,Vector3} from 'three';
+import {weatherParticles,precipitationPosition} from '../src/room/precipitation.mjs';
 
 test('automatic dayparts use China time, including midnight and boundaries',()=>{
   for(const [at,want] of [['2026-11-01T22:59:00Z','night'],['2026-11-01T23:00:00Z','day'],['2026-11-02T09:00:00Z','dusk'],['2026-11-02T11:00:00Z','night']])assert.equal(roomEnvironment('auto','clear',new Date(at)).period,want);
@@ -43,4 +44,15 @@ test('room bounds fit narrow and wide viewports across permitted camera angles w
     for(const p of corners){const projected=p.clone().project(camera);assert.ok(Math.abs(projected.x)<1&&Math.abs(projected.y)<1);}
     assert.ok(Math.abs((camera.right-camera.left)/(camera.top-camera.bottom)-aspect)<1e-9);
   }
+});
+
+test('weather remains inside the actual window over long running and switches between rain and snow',()=>{
+  const particles=weatherParticles();assert.equal(particles.length,72);assert.deepEqual(particles,weatherParticles());
+  assert.equal(new Set(particles.map(p=>p.speed)).size,particles.length);
+  for(const time of [0,.04,1,10,7200,86400])for(const weather of ['snow','rain'])for(const particle of particles){
+    const p=precipitationPosition(particle,time,weather);
+    assert.ok(p.x>-.99&&p.x<2.4);assert.ok(p.y>=.98&&p.y<2.98);assert.equal(p.z,-3.1);
+  }
+  const snow=precipitationPosition(particles[0],.1,'snow'),rain=precipitationPosition(particles[0],.1,'rain');
+  assert.notEqual(snow.y,rain.y);assert.notEqual(snow.x,rain.x);
 });
