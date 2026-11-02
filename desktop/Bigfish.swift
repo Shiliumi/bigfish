@@ -181,7 +181,17 @@ final class FishDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKN
     }
     @objc func notificationSettings() { NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.Notifications-Settings.extension")!) }
     @objc func wokeUp() { pollInbox(); checkPage(); if !loaded && !pageNeedsRecovery { startBackend() } }
-    func applicationDidBecomeActive(_ notification: Notification) { if window?.isVisible == true { checkPage() } }
+    func publishWindowVisibility() {
+        guard web != nil, window != nil else { return }
+        let visible = window.isVisible && !window.isMiniaturized && window.occlusionState.contains(.visible) && !NSApp.isHidden
+        web.evaluateJavaScript("window.__FISH_WINDOW_VISIBLE__ = \(visible ? "true" : "false"); window.dispatchEvent(new CustomEvent('fish:window-visibility'))")
+    }
+    func windowDidChangeOcclusionState(_ notification: Notification) { publishWindowVisibility() }
+    func windowDidMiniaturize(_ notification: Notification) { publishWindowVisibility() }
+    func windowDidDeminiaturize(_ notification: Notification) { publishWindowVisibility() }
+    func applicationDidHide(_ notification: Notification) { publishWindowVisibility() }
+    func applicationDidUnhide(_ notification: Notification) { publishWindowVisibility() }
+    func applicationDidBecomeActive(_ notification: Notification) { publishWindowVisibility(); if window?.isVisible == true { checkPage() } }
     func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
         pageNeedsRecovery = true; loaded = false; uiReady = false; healthChecking = false
         if window.isVisible && NSApp.isActive { recoverPage() }
@@ -279,7 +289,7 @@ final class FishDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKN
         if body["type"] == "app.folder", let folder = body["folder"], let relative = ["reports":"reports", "memory":".hermes/memories", "logs":".setup"][folder] { NSWorkspace.shared.open(URL(fileURLWithPath: root + "/" + relative)) }
         if body["type"] == "notifications.status" { publishNotificationStatus() }
         if body["type"] == "ui.presence" { recordActivity(publish: false) }
-        if body["type"] == "ui.ready" { loaded = true; uiReady = true; pageNeedsRecovery = false; recoveryAttempts = 0; recoveryOverlay?.removeFromSuperview(); recoveryOverlay = nil; publishPetStatus(); openPendingPanel(); openPendingSettings(); if let text = pendingPetText { pendingPetText = nil; sendPet(text) } }
+        if body["type"] == "ui.ready" { loaded = true; uiReady = true; pageNeedsRecovery = false; recoveryAttempts = 0; recoveryOverlay?.removeFromSuperview(); recoveryOverlay = nil; publishPetStatus(); publishWindowVisibility(); openPendingPanel(); openPendingSettings(); if let text = pendingPetText { pendingPetText = nil; sendPet(text) } }
         if body["type"] == "notifications.request" { requestNotifications() }
         if body["type"] == "notifications.settings" { notificationSettings() }
         if body["type"] == "pet.status" { publishPetStatus() }

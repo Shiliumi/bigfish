@@ -2,6 +2,8 @@
 
 完整视频以 Release 素材包分发，源码库只保留 PNG 海报、专门补绘的探头素材、播放清单、哈希和署名。不要将本机 data/stickers 或截图当作发布素材。
 
+小屋首版的家具、材质、海景和电脑屏幕纹理由 `ui/src/room/scene.ts` 程序绘制，按仓库代码许可分发，没有外部家具模型包。房间人物复用本页所述角色动画，继续遵守原有署名与非商业等素材条件。参考设计与当前实现边界见 [小屋样片说明](room-first-slice.md)。
+
 ## 恢复当前版本
 
 运行 `python3 scripts/restore_pet_assets.py`。需要 GitHub CLI 和仓库访问权限。手动下载时使用 `--archive 路径`，只校验本地文件用 `--check`。仓库迁移可用 `--repo owner/repo`，仍按固定标签与校验清单恢复。

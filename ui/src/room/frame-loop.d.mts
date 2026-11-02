@@ -1,0 +1,1 @@
+export function createFrameLoop(draw:(dt:number,time:number)=>void, options?:{request?:(callback:FrameRequestCallback)=>number;cancel?:(handle:number)=>void;now?:()=>number}):{active:(value:boolean)=>void;dispose:()=>void};
