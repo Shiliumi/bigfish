@@ -15,6 +15,18 @@ test('private data requires a local session cookie',async()=>{
   assert.equal((await fetch(BASE+'/api/balance')).status,401);
   assert.equal((await fetch(BASE+'/api/model-settings')).status,401);
   assert.equal((await fetch(BASE+'/api/budget')).status,401);
+  assert.equal((await fetch(BASE+'/api/room')).status,401);
+  assert.equal((await fetch(BASE+'/api/room/photos/ph-'+'0'.repeat(24)+'/image')).status,401);
+});
+
+test('room snapshots and photos inherit desktop authentication and mutation protections',async()=>{
+  const before=await(await fetch(BASE+'/api/room',{headers})).json();assert.ok(Number.isSafeInteger(before.revision));assert.deepEqual(Object.keys(before.layout).sort(),['book','cup','cushion']);assert.ok(Array.isArray(before.photos));
+  const request={action:'reset',revision:-1,operation_id:crypto.randomUUID()};
+  assert.equal((await fetch(BASE+'/api/room',{method:'PUT',headers,body:JSON.stringify(request)})).status,409);
+  assert.equal((await fetch(BASE+'/api/room',{method:'PUT',headers:{...headers,Origin:'https://example.org'},body:JSON.stringify(request)})).status,403);
+  assert.equal((await fetch(BASE+'/api/room/photos',{method:'POST',headers:{cookie,'Content-Type':'application/json'},body:'{}'})).status,403);
+  assert.equal((await fetch(BASE+'/api/room/photos/ph-'+'0'.repeat(24)+'/image',{headers})).status,404);
+  assert.deepEqual(await(await fetch(BASE+'/api/room',{headers})).json(),before);
 });
 
 test('daily allowance is private, revision-safe and records no request contents',async()=>{

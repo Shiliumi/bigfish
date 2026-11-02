@@ -165,7 +165,8 @@ final class FishDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKN
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool { showWindow(); return true }
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
     @objc func about() {
-        NSApp.orderFrontStandardAboutPanel(options: [.applicationName: "大肥鱼", .applicationVersion: "1.6", .credits: NSAttributedString(string: "你的本地 AI 冲浪搭子\n\n社区鲸鱼娘图标：可以叫我云大人 / 雾雪 · kiriyuki.com\n形象基于 ZipZipPipe 与 上善无形\n图标：github.com/Loping151/dsh-nekowhale-stickers\n动画：github.com/PC2005-cloud/dsh-pet\nCC BY-NC-SA 4.0 · 个人非商业使用 · 非 DeepSeek 官方应用")])
+        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? ""
+        NSApp.orderFrontStandardAboutPanel(options: [.applicationName: "大肥鱼", .applicationVersion: version, .credits: NSAttributedString(string: "你的本地 AI 冲浪搭子\n\n社区鲸鱼娘图标：可以叫我云大人 / 雾雪 · kiriyuki.com\n形象基于 ZipZipPipe 与 上善无形\n图标：github.com/Loping151/dsh-nekowhale-stickers\n动画：github.com/PC2005-cloud/dsh-pet\nCC BY-NC-SA 4.0 · 个人非商业使用 · 非 DeepSeek 官方应用")])
     }
     @objc func requestNotifications() {
         UNUserNotificationCenter.current().getNotificationSettings { settings in

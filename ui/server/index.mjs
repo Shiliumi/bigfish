@@ -16,6 +16,7 @@ import { renameStoredChat } from './session-title.mjs';
 import { curiositySnapshot } from './curiosity.mjs';
 import { createUsage } from './usage.mjs';
 import { journal, learningScript } from './journal.mjs';
+import {createRoomStore} from './room.mjs';
 
 const UI = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const ROOT = path.dirname(UI), HOME = path.join(ROOT, '.hermes');
@@ -24,6 +25,7 @@ const SESSION = randomBytes(32).toString('hex');
 const desktopAccess = await createDesktopAccess(ROOT,{keyPath:desktopKeyPath()});
 const hermesPanel = createHermesPanel(native,{renameChat:async(id,title)=>renameStoredChat(`ws://127.0.0.1:9119/api/ws?token=${encodeURIComponent(await getToken())}`,id,title)});
 const usage = createUsage(ROOT,native);
+const room = createRoomStore(ROOT);
 const documents = { memory: path.join(HOME,'memories/MEMORY.md'), user: path.join(HOME,'memories/USER.md'), interests: path.join(ROOT,'INTERESTS.md'), soul: path.join(HOME,'SOUL.md') };
 let nativeToken = '', tokenTime = 0, vite;
 const chatTickets = new Map();
@@ -59,8 +61,8 @@ function authorize(req, ticketValid=false) {
   if (origin && ![`http://127.0.0.1:${PORT}`,`http://localhost:${PORT}`].includes(origin)) fail('不允许跨站访问。',403);
   if (!['GET','HEAD'].includes(req.method) && req.headers['x-fish-client']!=='studio') fail('请求缺少客户端标识。',403);
 }
-async function body(req) {
-  let data=''; for await(const chunk of req) { data+=chunk; if(Buffer.byteLength(data)>1024*1024) fail('内容过长。',413); }
+async function body(req,limit=1024*1024) {
+  let data=''; for await(const chunk of req) { data+=chunk; if(Buffer.byteLength(data)>limit) fail('内容过长。',413); }
   try { return JSON.parse(data||'{}'); } catch { fail('请求格式不正确。'); }
 }
 async function getToken(force=false) {
@@ -103,6 +105,14 @@ async function overview() {
 }
 async function handleAPI(req,res,url) {
   authorize(req);const name=url.pathname;
+  if(name==='/api/room'&&req.method==='GET')return json(res,200,await room.snapshot());
+  if(name==='/api/room'&&req.method==='PUT')return json(res,200,await room.update(await body(req)));
+  if(name==='/api/room/photos'&&req.method==='POST')return json(res,201,await room.photo(await body(req,3*1024*1024)));
+  const roomPhoto=name.match(/^\/api\/room\/photos\/(ph-[a-f0-9]{24})(\/image)?$/);
+  if(roomPhoto&&req.method==='GET'){
+    if(!roomPhoto[2])return json(res,200,await room.detail(roomPhoto[1]));
+    const bytes=await room.image(roomPhoto[1]);res.writeHead(200,{'Content-Type':'image/png','Cache-Control':'private, max-age=86400','X-Content-Type-Options':'nosniff'});return res.end(bytes);
+  }
   if(name==='/api/usage' && req.method==='GET') return json(res,200,await usage.snapshot(url.searchParams.get('days')));
   if(name==='/api/budget' && req.method==='GET') return json(res,200,await learningScript(ROOT,'fish_budget.py',{action:'snapshot'}));
   if(name==='/api/budget' && req.method==='PUT') {const data=await body(req);return json(res,200,await learningScript(ROOT,'fish_budget.py',{action:'settings',enabled:data.enabled,daily_tokens:data.daily_tokens,revision:data.revision}));}

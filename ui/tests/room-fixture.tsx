@@ -15,6 +15,12 @@ function sample(phase:string) {
 }
 window.addEventListener('pointerdown',event=>{if((event.target as Element).closest('.room-character')){sample('down');requestAnimationFrame(()=>sample('held'))}})
 window.addEventListener('pointerup',()=>sample('up'))
+const drags:object[]=[]
+for(const phase of ['pointerdown','pointermove','pointerup'])window.addEventListener(phase,event=>{
+  const e=event as PointerEvent;if(!(e.target as Element).matches('.room-stage>canvas'))return
+  drags.push({phase,x:e.clientX,y:e.clientY,buttons:e.buttons});if(drags.length>24)drags.shift()
+  const output=document.getElementById('drag-trace');if(output)output.textContent=JSON.stringify(drags)
+},true)
 function visibility() {
   const w=window as Window&{__FISH_WINDOW_VISIBLE__?:boolean};w.__FISH_WINDOW_VISIBLE__=w.__FISH_WINDOW_VISIBLE__===false
   window.dispatchEvent(new CustomEvent('fish:window-visibility'));document.getElementById('visibility-note')!.textContent=w.__FISH_WINDOW_VISIBLE__?'恢复显示':'已模拟隐藏'
@@ -31,6 +37,7 @@ createRoot(document.getElementById('root')!).render(<main style={{height:'100dvh
       <button onClick={visibility}>模拟隐藏 / 恢复</button><span id="visibility-note"/>
       <button onClick={contextLoss}>模拟图形上下文丢失 / 恢复</button><span id="context-note"/>
       <output id="regression-trace" style={{display:'block',fontSize:10,overflowWrap:'anywhere'}}/>
+      <output id="drag-trace" style={{display:'block',fontSize:10,overflowWrap:'anywhere'}}/>
     </details>
   </div>
 </main>)

@@ -5,8 +5,9 @@ import type { RoomEnvironment } from './environment.mjs'
 import { createFrameLoop } from './frame-loop.mjs'
 import { roomFrustum } from './environment.mjs'
 import { weatherParticles, precipitationPosition } from './precipitation.mjs'
+import { defaultLayout,objects,surfaces,placeObject,type Layout,type ObjectId } from './layout.mjs'
 
-type Options = {select:(id:string)=>void; project:(x:number,y:number,size:number)=>void; lost:()=>void; restored:()=>void}
+type Options = {select:(id:string)=>void; project:(x:number,y:number,size:number)=>void; lost:()=>void; restored:()=>void;move?:(layout:Layout)=>void;notice?:(text:string)=>void}
 
 export function createRoom(host:HTMLDivElement, options:Options) {
   const scene = new T.Scene()
@@ -80,11 +81,11 @@ export function createRoom(host:HTMLDivElement, options:Options) {
   const tail=sphere(bed,.16,-2.64,1.25,-.77,blue); tail.scale.set(1.6,.3,1)
 
   const bedside=group('lamp')
-  box(bedside,.67,.75,.65,-.98,.4,-1.38,white,.06)
-  for(const y of [.27,.57]) { box(bedside,.57,.25,.04,-.98,y,-1.04,cream); sphere(bedside,.027,-.98,y,-1.005,gold) }
-  cylinder(bedside,.17,.17,.035,-.98,.81,-1.38,gold)
-  cylinder(bedside,.025,.025,.36,-.98,1,-1.38,gold)
-  cylinder(bedside,.19,.28,.31,-.98,1.3,-1.38,mat('#fff0ce',{emissive:'#ffdca3',emissiveIntensity:.22}))
+  box(bedside,.86,.75,.86,-.85,.4,-1.4,white,.06)
+  for(const y of [.27,.57]) { box(bedside,.76,.25,.04,-.85,y,-.96,cream); sphere(bedside,.027,-.85,y,-.93,gold) }
+  cylinder(bedside,.14,.14,.035,-1.1,.81,-1.64,gold)
+  cylinder(bedside,.025,.025,.36,-1.1,1,-1.64,gold)
+  cylinder(bedside,.17,.23,.31,-1.1,1.3,-1.64,mat('#fff0ce',{emissive:'#ffdca3',emissiveIntensity:.22}))
 
   const desk=group('desk')
   box(desk,2.65,.13,.86,1.15,1.12,-2.33,lightWood,.06)
@@ -144,11 +145,16 @@ export function createRoom(host:HTMLDivElement, options:Options) {
   sphere(rug,.027,.07,.089,1.02,white).scale.y=.1
   const cushion=group('cushion');const pillow2=sphere(cushion,.38,-.75,.15,1.58,navy);pillow2.scale.set(1.4,.35,.9)
   const book=group('book');box(book,.41,.07,.55,-.91,.085,2.15,mat('#b98b78'));box(book,.36,.045,.5,-.91,.14,2.15,white);box(book,.41,.025,.55,-.91,.18,2.15,mat('#bd9c84'))
+  const movable={cup:mug,book,cushion},pivots={cup:new T.Vector3(.2,1.18,-2.13),book:new T.Vector3(-.91,.05,2.15),cushion:new T.Vector3(-.75,.017,1.58)}
+  for(const id of Object.keys(movable) as ObjectId[])for(const child of movable[id].children)child.position.sub(pivots[id])
+  let layout:Layout=defaultLayout(),editing=false,dirtyFrame=true
+  function applyLayout(value:Layout){dirtyFrame=true;layout=structuredClone(value);for(const id of Object.keys(movable) as ObjectId[]){const p=layout[id];movable[id].position.set(p.x,surfaces[p.surface].y,p.z);movable[id].rotation.y=p.rotation*Math.PI/180}renderer.shadowMap.needsUpdate=true}
+  applyLayout(layout)
 
   const ambient=new T.HemisphereLight('#f5f7f2','#c5b096',2);scene.add(ambient)
   const sun=new T.DirectionalLight('#fff2d8',3);sun.position.set(2.5,7,4);sun.castShadow=true
   sun.shadow.mapSize.set(1024,1024);Object.assign(sun.shadow.camera,{left:-5,right:5,top:5,bottom:-5,near:.5,far:22});sun.shadow.normalBias=.035;sun.shadow.bias=-.0002;sun.shadow.radius=3;scene.add(sun)
-  const lamp=new T.PointLight('#ffc782',2,5,2);lamp.position.set(-.98,1.25,-1.36);scene.add(lamp)
+  const lamp=new T.PointLight('#ffc782',2,5,2);lamp.position.set(-1.1,1.25,-1.64);scene.add(lamp)
   const fill=new T.DirectionalLight('#d0e9fa',1);fill.position.set(-2,4,-4);scene.add(fill)
   const ground=mesh(scene,new T.PlaneGeometry(200,200),mat('#eef3f2'),0,-.35,0);ground.rotation.x=-Math.PI/2;ground.castShadow=false
 
@@ -173,10 +179,11 @@ export function createRoom(host:HTMLDivElement, options:Options) {
   let width=1,height=1
   const corners:T.Vector3[]=[]
   for(const x of [-3.8,3.8])for(const y of [-.5,3.8])for(const z of [-3.3,3.3])corners.push(new T.Vector3(x,y,z))
-  function fit(){
-    camera.updateMatrixWorld();Object.assign(camera,roomFrustum(width/height,corners.map(p=>p.clone().applyMatrix4(camera.matrixWorldInverse))))
-    camera.updateProjectionMatrix()
+  function fitCamera(target:T.OrthographicCamera,w:number,h:number){
+    target.updateMatrixWorld();Object.assign(target,roomFrustum(w/h,corners.map(p=>p.clone().applyMatrix4(target.matrixWorldInverse))))
+    target.updateProjectionMatrix()
   }
+  const fit=()=>fitCamera(camera,width,height)
   function sky(env:RoomEnvironment) {
     const c=skyCanvas.getContext('2d')!, night=env.period==='night';const grad=c.createLinearGradient(0,0,0,512)
     const snow=env.weather==='snow'
@@ -193,7 +200,7 @@ export function createRoom(host:HTMLDivElement, options:Options) {
   }
   function render() {
     if(disposed||lost||!environment)return
-    controls.update();fit();project();renderer.render(scene,camera)
+    controls.update();fit();project();renderer.render(scene,camera);dirtyFrame=false
   }
   const reducedMotion=matchMedia('(prefers-reduced-motion: reduce)')
   const loop=createFrameLoop((dt)=>{
@@ -208,7 +215,7 @@ export function createRoom(host:HTMLDivElement, options:Options) {
       rainGeometry.attributes.position.needsUpdate=true
     }
     const moved=controls.update()
-    if(moved||environment.weather!=='clear'){fit();project();renderer.render(scene,camera)}
+    if(moved||dirtyFrame||environment.weather!=='clear'){fit();project();renderer.render(scene,camera);dirtyFrame=false}
   })
   function resize() {
     const nextWidth=host.clientWidth,nextHeight=host.clientHeight
@@ -218,27 +225,65 @@ export function createRoom(host:HTMLDivElement, options:Options) {
   }
   const observer=new ResizeObserver(resize);observer.observe(host)
   const ray=new T.Raycaster(), pointer=new T.Vector2();let down:[number,number]|null=null
-  const onDown=(e:PointerEvent)=>{down=[e.clientX,e.clientY]}
+  let drag:{id:ObjectId;pointer:number;original:Layout;candidate:Layout|null}|null=null
+  function pick(e:PointerEvent){const b=renderer.domElement.getBoundingClientRect();pointer.set((e.clientX-b.left)/b.width*2-1,-(e.clientY-b.top)/b.height*2+1);ray.setFromCamera(pointer,camera)}
+  const onDown=(e:PointerEvent)=>{
+    down=[e.clientX,e.clientY];if(!editing||e.button!==0)return;pick(e)
+    const hit=ray.intersectObjects(Object.values(movable),true)[0];if(!hit)return
+    let node:T.Object3D|null=hit.object;while(node&&!node.userData.slot)node=node.parent
+    if(!node)return;const id=node.userData.slot as ObjectId
+    e.stopImmediatePropagation();renderer.domElement.setPointerCapture(e.pointerId);controls.enabled=false;drag={id,pointer:e.pointerId,original:structuredClone(layout),candidate:null};options.select(id)
+  }
+  const onMove=(e:PointerEvent)=>{
+    if(!drag||drag.pointer!==e.pointerId)return;e.stopImmediatePropagation();pick(e)
+    const candidates:{distance:number;layout:Layout}[]=[]
+    for(const surface of objects[drag.id].surfaces){const p=ray.ray.intersectPlane(new T.Plane(new T.Vector3(0,1,0),-surfaces[surface].y),new T.Vector3());if(!p)continue
+      try{const value=placeObject(drag.original,drag.id,{surface,x:Math.round(p.x*20)/20,z:Math.round(p.z*20)/20,rotation:drag.original[drag.id].rotation});candidates.push({distance:p.distanceTo(ray.ray.origin),layout:value})}catch{}
+    }
+    candidates.sort((a,b)=>a.distance-b.distance);drag.candidate=candidates[0]?.layout||null
+    if(drag.candidate){applyLayout(drag.candidate);options.notice?.('松开放到这里，再保存布置。')}else options.notice?.('这里放不下，松开会放回原位。');if(reducedMotion.matches)render()
+  }
+  function finishDrag(cancel=false){if(!drag)return;const value=!cancel&&drag.candidate?drag.candidate:drag.original;applyLayout(value);controls.enabled=true;drag=null;options.move?.(value);options.notice?.('');render()}
+  const onCancel=()=>finishDrag(true)
+  const onWheel=(e:WheelEvent)=>{controls.enableZoom=e.ctrlKey||e.metaKey}
   const onUp=(e:PointerEvent)=>{
+    if(drag&&drag.pointer!==e.pointerId)return
+    if(drag){e.stopImmediatePropagation();if(renderer.domElement.hasPointerCapture(e.pointerId))renderer.domElement.releasePointerCapture(e.pointerId);finishDrag();down=null;return}
     if(!down||Math.hypot(e.clientX-down[0],e.clientY-down[1])>5)return;down=null
     const bounds=renderer.domElement.getBoundingClientRect();pointer.set((e.clientX-bounds.left)/bounds.width*2-1,-(e.clientY-bounds.top)/bounds.height*2+1)
     ray.setFromCamera(pointer,camera);const hit=ray.intersectObjects(targets,true)[0];if(!hit)return
     let object:T.Object3D|null=hit.object;while(object&&!object.userData.slot)object=object.parent
     if(object)options.select(object.userData.slot)
   }
-  const onLost=(event:Event)=>{event.preventDefault();lost=true;loop.active(false);options.lost()}
+  const onLost=(event:Event)=>{event.preventDefault();lost=true;finishDrag(true);loop.active(false);options.lost()}
   const onRestored=()=>{lost=false;renderer.shadowMap.needsUpdate=true;resize();loop.active(active&&!reducedMotion.matches);options.restored()}
   const onMotion=()=>loop.active(active&&!lost&&!reducedMotion.matches)
   reducedMotion.addEventListener('change',onMotion)
-  renderer.domElement.addEventListener('pointerdown',onDown);renderer.domElement.addEventListener('pointerup',onUp)
+  renderer.domElement.addEventListener('pointerdown',onDown,true);renderer.domElement.addEventListener('pointermove',onMove,true);renderer.domElement.addEventListener('pointerup',onUp,true);renderer.domElement.addEventListener('pointercancel',onCancel)
+  renderer.domElement.addEventListener('wheel',onWheel,{capture:true,passive:true})
   renderer.domElement.addEventListener('webglcontextlost',onLost);renderer.domElement.addEventListener('webglcontextrestored',onRestored)
   controls.addEventListener('change',()=>{if((!active||reducedMotion.matches)&&!disposed&&!lost&&environment){fit();project();renderer.render(scene,camera)}})
   resize()
   return {
     environment(env:RoomEnvironment, light:boolean) {environment=env;lampOn=light;scene.background=new T.Color(env.background);(ground.material as T.MeshStandardMaterial).color.set(env.background);ambient.intensity=env.ambient;sun.intensity=env.sun;sun.color.set(env.period==='dusk'?'#ffd3a3':'#fff2d8');lamp.intensity=lampOn?env.lamp:0;particles.visible=env.weather!=='clear';points.visible=env.weather==='snow';rain.visible=env.weather==='rain';sky(env);renderer.shadowMap.needsUpdate=true;render()},
-    active(value:boolean){if(active===value)return;active=value;loop.active(active&&!lost&&!reducedMotion.matches);if(active)resize()},
+    active(value:boolean){if(active===value)return;active=value;if(!active)finishDrag(true);loop.active(active&&!lost&&!reducedMotion.matches);if(active)resize()},
+    layout(value:Layout){applyLayout(value);render()},
+    editing(value:boolean){if(!value)finishDrag(true);editing=value},
+    photo(view:'room'|'window',character?:CanvasImageSource){
+      if(disposed||lost||!active)throw Error('请回到小屋，等画面恢复后再拍照。')
+      const w=1024,h=view==='window'?1024:768,shot=view==='window'?new T.PerspectiveCamera(48,1,.1,70):camera.clone()
+      if(shot instanceof T.PerspectiveCamera){shot.position.set(1.15,1.73,.85);shot.lookAt(.73,1.85,-3.05);shot.updateMatrixWorld()}
+      else {shot.zoom=1;shot.position.set(10,8.8,12);shot.lookAt(0,1.5,0);fitCamera(shot,w,h)}
+      const canvas=document.createElement('canvas');canvas.width=w;canvas.height=h;const context=canvas.getContext('2d')!,ratio=renderer.getPixelRatio()
+      // The default framebuffer applies the same tone mapping as the visible room.
+      // Keep CSS dimensions fixed and restore the live frame before the browser can paint.
+      try{renderer.setPixelRatio(1);renderer.setSize(w,h,false);renderer.render(scene,shot);context.drawImage(renderer.domElement,0,0,w,h)}finally{renderer.setPixelRatio(ratio);renderer.setSize(width,height,false);render()}
+      if(view==='room'&&character){const feet=new T.Vector3(.5,.09,1.15).project(shot),head=new T.Vector3(.5,1.8,1.15).project(shot),sw=Math.max(70,Math.abs(head.y-feet.y)*h/2*1.13),sh=sw*9/8;context.filter=environment.period==='night'?'brightness(.78) saturate(.88)':environment.period==='dusk'?'brightness(.94) sepia(.06)':'none';context.drawImage(character,(feet.x+1)*w/2-sw/2,(1-feet.y)*h/2-sh*.94,sw,sh)}
+      return canvas.toDataURL('image/png')
+    },
     reset(){controls.reset();render()},
-    dispose(){disposed=true;active=false;loop.dispose();observer.disconnect();controls.dispose();reducedMotion.removeEventListener('change',onMotion);renderer.domElement.removeEventListener('pointerdown',onDown);renderer.domElement.removeEventListener('pointerup',onUp);renderer.domElement.removeEventListener('webglcontextlost',onLost);renderer.domElement.removeEventListener('webglcontextrestored',onRestored);textures.forEach(x=>x.dispose());materials.forEach(x=>x.dispose());geometries.forEach(x=>x.dispose());renderer.dispose();renderer.forceContextLoss();renderer.domElement.remove()},
+    zoom(delta:number){camera.zoom=T.MathUtils.clamp(camera.zoom+delta,.85,1.35);camera.updateProjectionMatrix();render()},
+    dispose(){disposed=true;active=false;loop.dispose();observer.disconnect();controls.dispose();reducedMotion.removeEventListener('change',onMotion);renderer.domElement.removeEventListener('pointerdown',onDown,true);renderer.domElement.removeEventListener('pointermove',onMove,true);renderer.domElement.removeEventListener('pointerup',onUp,true);renderer.domElement.removeEventListener('pointercancel',onCancel);renderer.domElement.removeEventListener('wheel',onWheel,true);renderer.domElement.removeEventListener('webglcontextlost',onLost);renderer.domElement.removeEventListener('webglcontextrestored',onRestored);textures.forEach(x=>x.dispose());materials.forEach(x=>x.dispose());geometries.forEach(x=>x.dispose());renderer.dispose();renderer.forceContextLoss();renderer.domElement.remove()},
   }
 }
 export type RoomScene = ReturnType<typeof createRoom>
