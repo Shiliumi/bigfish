@@ -37,6 +37,41 @@ class AdapterTest(unittest.TestCase):
         self.provider.on_session_switch('chat-later')
         self.assertIn('升降台',self.provider.prefetch('阿蓝'))
         with Journal(self.root) as journal:self.assertEqual(journal.status()['total'],1)
+    def test_native_message_identities_distinguish_equal_turns_and_keep_original_time(self):
+        from datetime import datetime,timezone,timedelta
+        self.initialize();now=datetime.now(timezone.utc)-timedelta(minutes=1)
+        def messages(number,at):
+            return [{'role':'user','content':'我回来了。','message_uid':str(number)*32,'timestamp':at.timestamp()-1},
+                    {'role':'assistant','content':'在呢。','message_uid':str(number+1)*32,'timestamp':at.timestamp()}]
+        first=messages(1,now-timedelta(hours=1));second=messages(3,now)
+        for payload in (first,second,first):self.provider.sync_turn('我回来了。','在呢。',messages=payload)
+        with Journal(self.root)as journal:
+            self.assertEqual(journal.status()['total'],2)
+            times=[r[0]for r in journal.db.execute('SELECT recorded_at FROM episodes ORDER BY recorded_at')]
+            self.assertEqual(times,[(now-timedelta(hours=1)).isoformat(),now.isoformat()])
+    def test_mismatched_missing_or_future_host_metadata_uses_legacy_capture(self):
+        from datetime import datetime,timezone,timedelta
+        self.initialize();future=(datetime.now(timezone.utc)+timedelta(days=1)).timestamp()
+        cases=[None,[{'role':'user','content':'other','message_uid':'a'*32,'timestamp':1},{'role':'assistant','content':'在呢。','message_uid':'b'*32,'timestamp':2}],
+               [{'role':'user','content':'我回来了。','message_uid':'a'*32,'timestamp':future},{'role':'assistant','content':'在呢。','message_uid':'b'*32,'timestamp':future}],
+               [{'role':'user','content':'我回来了。'},{'role':'assistant','content':'在呢。'}]]
+        for payload in cases:self.provider.sync_turn('我回来了。','在呢。',messages=payload)
+        with Journal(self.root)as journal:
+            self.assertEqual(journal.status()['total'],1)
+            self.assertEqual(journal.db.execute('SELECT count(*) FROM episode_capture_sources').fetchone()[0],0)
+    def test_delayed_equal_turn_does_not_clear_the_new_human_quote(self):
+        from datetime import datetime,timezone,timedelta
+        self.initialize();text='你记错了，我只是看过折纸。';past=datetime.now(timezone.utc)-timedelta(minutes=1)
+        self.provider.on_turn_start(2,text)
+        def messages(n,at):return [{'role':'user','content':text,'message_uid':str(n)*32,'timestamp':at.timestamp()-1},{'role':'assistant','content':'好。','message_uid':str(n+1)*32,'timestamp':at.timestamp()}]
+        self.provider.sync_turn(text,'好。',messages=messages(1,past),turn_author={'is_bot':False})
+        self.assertEqual(self.provider.current_user,text)
+        self.provider.sync_turn(text,'好。',messages=messages(3,datetime.now(timezone.utc)),turn_author={'is_bot':False})
+        self.assertEqual(self.provider.current_user,'')
+    def test_old_bot_callback_does_not_clear_an_equal_new_human_quote(self):
+        self.initialize();text='你记错了，我只是看过折纸。';self.provider.on_turn_start(2,text)
+        self.provider.sync_turn(text,'好。',turn_author={'is_bot':True})
+        self.assertEqual(self.provider.current_user,text)
     def test_cron_and_bot_inputs_do_not_become_shared_memories(self):
         self.initialize('cron');self.provider.sync_turn('自动任务','任务完成');self.assertEqual(self.provider.get_tool_schemas(),[])
         self.initialize();self.provider.on_turn_start(1,'自动投递',author_is_bot=True);self.provider.sync_turn('自动投递','自动回答')

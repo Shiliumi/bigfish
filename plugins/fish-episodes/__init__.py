@@ -5,6 +5,7 @@ import hashlib
 import json
 import re
 import sys
+from datetime import datetime,timezone
 from pathlib import Path
 from agent.memory_provider import MemoryProvider
 
@@ -14,6 +15,7 @@ class FishEpisodes(MemoryProvider):
         self.primary = None
         self.eligible = False
         self.current_user = ''
+        self.current_started_at = None
 
     @property
     def name(self):
@@ -68,10 +70,12 @@ class FishEpisodes(MemoryProvider):
     def on_turn_start(self, turn_number, message, **kwargs):
         self.eligible = self.primary and not kwargs.get('author_is_bot', False)
         self.current_user = message if self.eligible and isinstance(message,str) else ''
+        self.current_started_at = datetime.now(timezone.utc)
 
     def on_session_switch(self, new_session_id, **kwargs):
         self.session_id = new_session_id
         self.current_user = ''
+        self.current_started_at = None
 
     def system_prompt_block(self):
         if self.primary is False:return ''
@@ -109,13 +113,14 @@ class FishEpisodes(MemoryProvider):
         return journal.recall(query,exclude_session=exclude_session)
 
     def sync_turn(self, user_content, assistant_content, *, session_id='', **kwargs):
-        episode=None;eligible=False
+        episode=None;eligible=False;metadata={}
         try:
             author=kwargs.get('turn_author')
             eligible=self.primary and not bool(author.get('is_bot')) if isinstance(author,dict) else self.eligible
             if eligible:
                 with self.journal(self.root) as journal:
-                    episode=journal.capture(session_id or self.session_id, user_content, assistant_content)
+                    metadata=self._capture_identity(journal,kwargs.get('messages'),user_content,assistant_content)
+                    episode=journal.capture(session_id or self.session_id, user_content, assistant_content,**metadata)
                     if self.matters:
                         self.matters(journal,self.tokenize).bind_episode(session_id or self.session_id,user_content,episode)
                 if self.conversation:
@@ -123,11 +128,39 @@ class FishEpisodes(MemoryProvider):
                     except Exception:pass
         finally:
             # The manager syncs asynchronously: an older completed turn must not clear a newer one.
-            if self.current_user == user_content:self.current_user = ''
+            older=metadata.get('recorded_at')and self.current_started_at and datetime.fromisoformat(metadata['recorded_at'])<self.current_started_at
+            if eligible and not older and self.current_user == user_content:self.current_user = ''
         if eligible and episode and self.semantic:
             try:
                 with self.journal(self.root)as journal:self.semantic.index_pending(journal,preferred=episode['id'])
             except Exception:pass
+
+    def _capture_identity(self,journal,messages,user,assistant):
+        """Only host-owned metadata on the matching completed tail can name a turn."""
+        if not isinstance(messages,list)or len(messages)<2:return {}
+        final=messages[-1]
+        if not isinstance(final,dict)or final.get('role')!='assistant'or final.get('tool_calls')or final.get('display_kind')in ('interim','diagnostic'):return {}
+        try:
+            from agent.codex_responses_adapter import _summarize_user_message_for_log as flatten
+            from agent.skill_commands import extract_user_instruction_from_skill_message as instruction
+        except ImportError:
+            flatten=lambda value,**_:value if isinstance(value,str)else ''
+            instruction=lambda value:value
+        def clean(value):
+            text=flatten(value,sep='\n');return journal.clean_text(text,len(text))
+        if clean(final.get('content'))!=clean(assistant):return {}
+        for row in reversed(messages[:-1]):
+            if not isinstance(row,dict)or row.get('role')!='user':continue
+            if clean(instruction(flatten(row.get('content'),sep='\n')))!=clean(user):return {}
+            ids=[row.get('message_uid'),final.get('message_uid')];times=[row.get('timestamp'),final.get('timestamp')]
+            if any(not isinstance(i,str)or not re.fullmatch(r'[a-f0-9]{32}',i)for i in ids):return {}
+            if any(type(t)not in (int,float)for t in times):return {}
+            try:
+                at=datetime.fromtimestamp(times[1],timezone.utc)
+                if not 0<=times[0]<=times[1]or at>journal.now:return {}
+            except (ValueError,OverflowError,OSError):return {}
+            return {'source_event':hashlib.sha256(json.dumps(ids,separators=(',',':')).encode()).hexdigest(),'recorded_at':at.isoformat()}
+        return {}
 
     def get_tool_schemas(self):
         # Hermes registers tool routes before initialize() supplies the agent context.

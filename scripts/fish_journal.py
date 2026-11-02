@@ -16,6 +16,7 @@ ROOT = Path(__file__).resolve().parents[1]
 UNSET = object()
 INDEX_VERSION = 2  # Bump when lexical/index rules change; derived entries then rebuild atomically.
 SCHEMA_VERSION = 1  # SQLite user_version; opening a ready store must not acquire a write lock.
+CAPTURE_VERSION = 2  # Additive identity receipts; older readers can still read the same source rows.
 LOCAL_TZ = ZoneInfo('Asia/Shanghai')
 # Small, auditable spelling/equivalence rules, not generated semantic facts.
 EQUIVALENTS = (
@@ -255,6 +256,8 @@ class Journal:
         if version!=SCHEMA_VERSION:return False
         row=self.db.execute("SELECT value FROM journal_meta WHERE key='index_version'").fetchone()
         if not row or row[0]!=str(INDEX_VERSION):return False
+        row=self.db.execute("SELECT value FROM journal_meta WHERE key='capture_version'").fetchone()
+        if not row or row[0]!=str(CAPTURE_VERSION):return False
         # Detect an older writer or interrupted derived-index update without changing source rows.
         return self.db.execute("SELECT 1 FROM episodes WHERE status='active' AND (index_version!=? OR indexed_revision!=revision) LIMIT 1",(INDEX_VERSION,)).fetchone()is None
 
@@ -277,6 +280,11 @@ class Journal:
                 snapshot TEXT NOT NULL, PRIMARY KEY(episode_id,revision)
             );
             CREATE TABLE IF NOT EXISTS journal_meta(key TEXT PRIMARY KEY,value TEXT);
+            CREATE TABLE IF NOT EXISTS episode_capture_sources (
+                source_hash TEXT PRIMARY KEY, episode_id TEXT NOT NULL,
+                legacy_receipt INTEGER NOT NULL DEFAULT 0
+            );
+            CREATE INDEX IF NOT EXISTS episode_capture_episode ON episode_capture_sources(episode_id);
             CREATE TABLE IF NOT EXISTS ongoing_matters (
                 id TEXT PRIMARY KEY, title TEXT NOT NULL, kind TEXT NOT NULL, status TEXT NOT NULL,
                 revision INTEGER NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
@@ -290,6 +298,8 @@ class Journal:
             );
             '''.split(';'):
                 if statement.strip():self.db.execute(statement)
+            if 'legacy_receipt'not in {r[1]for r in self.db.execute('PRAGMA table_info(episode_capture_sources)')}:
+                self.db.execute('ALTER TABLE episode_capture_sources ADD COLUMN legacy_receipt INTEGER NOT NULL DEFAULT 1')
             columns = {row[1] for row in self.db.execute('PRAGMA table_info(episodes)')}
             for name, definition in {'valid_from': 'TEXT', 'valid_until': 'TEXT', 'corrected_at': 'TEXT', 'correction_source': 'TEXT', 'kind': "TEXT NOT NULL DEFAULT 'event'",'aliases':"TEXT NOT NULL DEFAULT '[]'",'index_version':'INTEGER NOT NULL DEFAULT 0','indexed_revision':'INTEGER NOT NULL DEFAULT 0'}.items():
                 if name not in columns:
@@ -304,6 +314,7 @@ class Journal:
                     self._index(self.get(row['id']))
             for row in self.db.execute("SELECT * FROM episodes WHERE status='active' AND (index_version!=? OR indexed_revision!=revision)",(INDEX_VERSION,)).fetchall():self._index(dict(row))
             self.db.execute('INSERT OR REPLACE INTO journal_meta VALUES(?,?)',('index_version',str(INDEX_VERSION)))
+            self.db.execute('INSERT OR REPLACE INTO journal_meta VALUES(?,?)',('capture_version',str(CAPTURE_VERSION)))
             self.db.execute('PRAGMA user_version='+str(SCHEMA_VERSION))
 
     def __enter__(self):
@@ -353,9 +364,11 @@ class Journal:
     def clean_text(self,text,limit):
         return self.redact(safe_text(text,limit))
 
-    def capture(self, session_id, user, assistant, recorded_at=None):
+    def capture(self, session_id, user, assistant, recorded_at=None, *,source_event=None):
         if not re.fullmatch(r'[A-Za-z0-9_-]{1,256}', session_id or ''):
             raise ValueError('会话编号无效。')
+        if source_event is not None and (not isinstance(source_event,str)or not re.fullmatch(r'[a-f0-9]{64}',source_event)):
+            raise ValueError('来源回合编号无效。')
         user, assistant = safe_text(user, 4000), safe_text(assistant, 6000)
         if not user or not assistant:
             return None
@@ -366,10 +379,29 @@ class Journal:
         summary = user[:160] + ' · ' + assistant[:200]
         now = instant(recorded_at or self.now).isoformat()
         with self.db:
+            if not self.db.in_transaction:self.db.execute('BEGIN IMMEDIATE')
+            legacy_receipt=False
+            if source_event is not None:
+                mapped=self.db.execute('SELECT episode_id FROM episode_capture_sources WHERE source_hash=?',(source_event,)).fetchone()
+                if mapped:
+                    existing=self.get(mapped['episode_id'])
+                    if existing is None:raise ValueError('来源回执对应的经历缺失，未重新生成。')
+                    return existing
+                legacy=self.get(ident)
+                # Before this adapter, equal turns were coalesced. An older/equal
+                # native completion may alias that receipt, including its tombstone.
+                # Later completions are new events; do not rewrite the old source.
+                # The first occurrence keeps the legacy body id too, so a later
+                # callback lacking metadata cannot recreate a forgotten first turn.
+                if legacy:
+                    native=self.db.execute('SELECT 1 FROM episode_capture_sources WHERE episode_id=? AND legacy_receipt=0 LIMIT 1',(ident,)).fetchone()
+                    legacy_receipt=not native and instant(now)<=instant(legacy['recorded_at'])
+                    if not legacy_receipt:ident='ep-'+hashlib.sha256(('native-turn\0'+source_event).encode()).hexdigest()[:24]
             cursor = self.db.execute('INSERT OR IGNORE INTO episodes(id,session_id,source_ref,recorded_at,summary,excerpt,truncated,valid_from) VALUES(?,?,?,?,?,?,?,?)',
                 (ident, session_id, 'session:' + session_id, now, summary, excerpt, int(len(user) == 4000 or len(assistant) == 6000), now))
             if cursor.rowcount:
                 self._index(self.get(ident))
+            if source_event is not None:self.db.execute('INSERT INTO episode_capture_sources VALUES(?,?,?)',(source_event,ident,int(legacy_receipt)))
         return self.get(ident)
 
     def search(self, query='', limit=20, exclude_session='', scope='current', date_filter=True,strict_evidence=False):
