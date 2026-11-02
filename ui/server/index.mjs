@@ -26,6 +26,7 @@ const desktopAccess = await createDesktopAccess(ROOT,{keyPath:desktopKeyPath()})
 const hermesPanel = createHermesPanel(native,{renameChat:async(id,title)=>renameStoredChat(`ws://127.0.0.1:9119/api/ws?token=${encodeURIComponent(await getToken())}`,id,title)});
 const usage = createUsage(ROOT,native);
 const room = createRoomStore(ROOT);
+const roomProject=createHash('sha256').update(await realpath(ROOT)).digest('hex');
 const documents = { memory: path.join(HOME,'memories/MEMORY.md'), user: path.join(HOME,'memories/USER.md'), interests: path.join(ROOT,'INTERESTS.md'), soul: path.join(HOME,'SOUL.md') };
 let nativeToken = '', tokenTime = 0, vite;
 const chatTickets = new Map();
@@ -105,8 +106,10 @@ async function overview() {
 }
 async function handleAPI(req,res,url) {
   authorize(req);const name=url.pathname;
+  if(name.startsWith('/api/room')&&req.headers['x-fish-room-project']&&req.headers['x-fish-room-project']!==roomProject)fail('小屋不属于当前项目。',403);
   if(name==='/api/room'&&req.method==='GET')return json(res,200,await room.snapshot());
   if(name==='/api/room'&&req.method==='PUT')return json(res,200,await room.update(await body(req)));
+  if(name==='/api/room/actions'&&req.method==='POST'){if(req.headers['x-fish-room-project']!==roomProject)fail('房间动作需要当前项目标识。',403);return json(res,200,await room.move(await body(req)));}
   if(name==='/api/room/photos'&&req.method==='POST')return json(res,201,await room.photo(await body(req,3*1024*1024)));
   const roomPhoto=name.match(/^\/api\/room\/photos\/(ph-[a-f0-9]{24})(\/image)?$/);
   if(roomPhoto&&req.method==='GET'){

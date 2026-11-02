@@ -57,6 +57,10 @@
 .room-edit-palette>span { color:#9baaa2; font-size:10px; }
 .room-placement { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:16px; }
 .room-placement>span { width:100%; font-size:10px; color:#9aaba0; margin-bottom:3px; }
+.room-action-note { margin-top:20px; color:#8b9e92; font-size:11px; line-height:1.9; }
+.room-action-note>span { color:#a0aea4; font-size:10px; }
+.room-action-note p { margin:5px 0; }
+.room-action-note time { margin-left:14px; color:#aab5ad; font-size:10px; }
 .room-album { margin-top:26px; padding-top:20px; border-top:1px solid #e3eae4; }
 .room-album>header { display:flex; justify-content:space-between; color:#7c9286; font-size:12px; margin-bottom:12px; }
 .room-album small { font-size:10px; color:#a4afa8; }

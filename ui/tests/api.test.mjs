@@ -2,12 +2,16 @@ import {desktopKeyPath} from '../server/desktop-access.mjs';
 import {readFile} from 'node:fs/promises';
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {createHash} from 'node:crypto';
+import {fileURLToPath} from 'node:url';
+import path from 'node:path';
 
 const BASE='http://127.0.0.1:9120';
 const access=(await readFile(desktopKeyPath(),'utf8')).trim();
 const page=await fetch(BASE,{headers:{'X-Fish-Desktop':access}});
 const cookie=page.headers.getSetCookie().map(v=>v.split(';')[0]).join('; ');
 const headers={cookie,'Content-Type':'application/json','X-Fish-Client':'studio'};
+const roomHeaders={...headers,'X-Fish-Room-Project':createHash('sha256').update(path.resolve(fileURLToPath(new URL('../..',import.meta.url)))).digest('hex')};
 
 test('private data requires a local session cookie',async()=>{
   const response=await fetch(BASE+'/api/documents');assert.equal(response.status,401);
@@ -16,6 +20,7 @@ test('private data requires a local session cookie',async()=>{
   assert.equal((await fetch(BASE+'/api/model-settings')).status,401);
   assert.equal((await fetch(BASE+'/api/budget')).status,401);
   assert.equal((await fetch(BASE+'/api/room')).status,401);
+  assert.equal((await fetch(BASE+'/api/room/actions',{method:'POST',body:'{}'})).status,401);
   assert.equal((await fetch(BASE+'/api/room/photos/ph-'+'0'.repeat(24)+'/image')).status,401);
 });
 
@@ -25,6 +30,10 @@ test('room snapshots and photos inherit desktop authentication and mutation prot
   assert.equal((await fetch(BASE+'/api/room',{method:'PUT',headers,body:JSON.stringify(request)})).status,409);
   assert.equal((await fetch(BASE+'/api/room',{method:'PUT',headers:{...headers,Origin:'https://example.org'},body:JSON.stringify(request)})).status,403);
   assert.equal((await fetch(BASE+'/api/room/photos',{method:'POST',headers:{cookie,'Content-Type':'application/json'},body:'{}'})).status,403);
+  assert.equal((await fetch(BASE+'/api/room/actions',{method:'POST',headers:roomHeaders,body:JSON.stringify({object:'cup',surface:'sill',revision:-1,operation_id:crypto.randomUUID()})})).status,409);
+  assert.equal((await fetch(BASE+'/api/room/actions',{method:'POST',headers,body:'{}'})).status,403);
+  assert.equal((await fetch(BASE+'/api/room',{headers:{...headers,'X-Fish-Room-Project':'foreign-profile'}})).status,403);
+  assert.equal((await fetch(BASE+'/api/room/actions',{method:'POST',headers:{...headers,Origin:'https://example.org'},body:'{}'})).status,403);
   assert.equal((await fetch(BASE+'/api/room/photos/ph-'+'0'.repeat(24)+'/image',{headers})).status,404);
   assert.deepEqual(await(await fetch(BASE+'/api/room',{headers})).json(),before);
 });

@@ -40,6 +40,11 @@ class FishEpisodes(MemoryProvider):
         self.conversation = None
         self.matters = None
         self.semantic = None
+        self.room = None
+        room_file=Path(__file__).with_name('room.py')
+        if room_file.is_file():
+            spec=importlib.util.spec_from_file_location('_bigfish_bound_room',room_file)
+            helper=importlib.util.module_from_spec(spec);spec.loader.exec_module(helper);self.room=helper.RoomClient(self.root)
         if growth_file.is_file():
             growth_spec = importlib.util.spec_from_file_location('_bigfish_bound_growth', growth_file)
             self.growth = importlib.util.module_from_spec(growth_spec)
@@ -86,7 +91,8 @@ class FishEpisodes(MemoryProvider):
                 '试行偏好只供选择，不是用户偏好或固定口头禅；已放下或待复核的习惯先收起。'
                 '联系当前会话的铺垫接话，没接住玩笑就承认，不把临时逗弄的称号或假设存成事实与事项。认真求助时收起梗，普通闲聊不强行问问题或喊称呼；来源里没新进展就不编。'
                 '用户明确正在推进的目标、未解决问题或约定可用 fish_matters 保存和更新，引用当前原话；短暂闲聊、网页转述与鱼的建议不入事项。'
-                '事项只在相关时接续，已完成或暂停的不要当作仍待完成；不据此建日程或每天追问，日期未核实就不推算。')
+                '事项只在相关时接续，已完成或暂停的不要当作仍待完成；不据此建日程或每天追问，日期未核实就不推算。'
+                '小屋用 fish_room 查看布局与锁定；用户要求挪物品时先 inspect，再 move，只有成功回执才说已移动。工具失败时说明没挪成，不解锁或用文件工具绕过。')
 
     def prefetch(self, query, *, session_id=''):
         if not self.eligible:
@@ -166,16 +172,24 @@ class FishEpisodes(MemoryProvider):
         # Hermes registers tool routes before initialize() supplies the agent context.
         if self.primary is False:
             return []
-        return [{'name': 'fish_recall', 'description': '按话题、转述、简称、已设置别名或日期找回具体共同聊天经历。支持昨天、前天、上周及明确日期；可选本地语义补充返回候选原话，不代表所问细节已记录，找不到别编。',
+        tools=[{'name': 'fish_recall', 'description': '按话题、转述、简称、已设置别名或日期找回具体共同聊天经历。支持昨天、前天、上周及明确日期；可选本地语义补充返回候选原话，不代表所问细节已记录，找不到别编。',
                  'parameters': {'type': 'object', 'properties': {'query': {'type': 'string', 'description': '具体话题、作品、两字昵称或未完问题'}}, 'required': ['query'], 'additionalProperties': False}},
                 {'name':'fish_correct_memory','description':'用户明确纠正记错的旧回忆时，以当前用户原话更新该段共同经历；不能凭猜测改写，不修改核心 USER。先用 fish_recall 取得 id 和 revision。',
                  'parameters':{'type':'object','properties':{'id':{'type':'string'},'revision':{'type':'integer'},'quote':{'type':'string','description':'当前用户消息中的原文片段，最多450字，不能改写；留空使用当前原话。'}},'required':['id','revision'],'additionalProperties':False}},
                 {'name':'fish_matters','description':'找回或更新用户明确的持续目标、未解决问题和约定。list 查询取得 id/revision；remember 的 title 必须摘自当前用户 quote，update 引用当前进展原话。默认保留90天，不创建提醒或推测日期。',
                  'parameters':{'type':'object','properties':{'action':{'type':'string','enum':['list','remember','update']},'query':{'type':'string'},'title':{'type':'string'},'kind':{'type':'string','enum':['goal','issue','promise']},'id':{'type':'string'},'revision':{'type':'integer'},'quote':{'type':'string'},'status':{'type':'string','enum':['open','paused','done']}},'required':['action'],'additionalProperties':False}}]
+        room_file=Path(__file__).with_name('room.py')
+        if room_file.is_file():
+            spec=importlib.util.spec_from_file_location('_bigfish_room_schema',room_file)
+            helper=importlib.util.module_from_spec(spec);spec.loader.exec_module(helper);tools.append(helper.SCHEMA)
+        return tools
 
     def handle_tool_call(self, tool_name, args, **kwargs):
         if not self.eligible:
             return json.dumps({'error': '这次不提供共同聊天回忆。'}, ensure_ascii=False)
+        if tool_name=='fish_room':
+            if not self.room:return json.dumps({'ok':False,'error':'小屋适配尚未加载。'},ensure_ascii=False)
+            return json.dumps(self.room.live(args,self.current_user,self.session_id,self.current_started_at),ensure_ascii=False,separators=(',',':'))
         if tool_name=='fish_matters':
             if not self.matters:return json.dumps({'error':'事项适配尚未加载。'},ensure_ascii=False)
             try:

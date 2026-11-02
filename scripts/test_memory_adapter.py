@@ -18,6 +18,7 @@ class AdapterTest(unittest.TestCase):
         shutil.copy2(source/'plugins/fish-episodes/__init__.py',plugin/'__init__.py');shutil.copy2(source/'scripts/fish_journal.py',plugin/'journal.py');shutil.copy2(source/'scripts/personality.py',plugin/'growth.py')
         shutil.copy2(source/'scripts/fish_conversation.py',plugin/'conversation.py')
         shutil.copy2(source/'scripts/fish_matters.py',plugin/'matters.py')
+        shutil.copy2(source/'scripts/fish_room.py',plugin/'room.py')
         semantic=plugin/'semantic';semantic.mkdir();(semantic/'__init__.py').write_text('')
         for name in ('fish_journal.py','fish_semantic_cache.py','fish_embeddings.py','fish_embedding_process.py','fish_embedding_worker.py','fish_semantic_recall.py'):
             shutil.copy2(source/'scripts'/name,semantic/name)
@@ -28,7 +29,7 @@ class AdapterTest(unittest.TestCase):
     def initialize(self,scope='primary'):
         self.provider.initialize('chat-new',hermes_home=str(self.root/'.hermes'),agent_context=scope)
     def test_tool_routes_are_advertised_before_initialization_but_cannot_execute(self):
-        self.assertEqual({s['name']for s in self.provider.get_tool_schemas()},{'fish_recall','fish_correct_memory','fish_matters'})
+        self.assertEqual({s['name']for s in self.provider.get_tool_schemas()},{'fish_recall','fish_correct_memory','fish_matters','fish_room'})
         self.assertIn('error',json.loads(self.provider.handle_tool_call('fish_recall',{'query':'积木'})))
     def test_primary_turn_records_once_and_recall_excludes_current_conversation(self):
         self.initialize();self.provider.on_turn_start(1,'旧话题');self.provider.sync_turn('还记得阿蓝的积木厨房吗','上次加了升降台。')
@@ -83,6 +84,16 @@ class AdapterTest(unittest.TestCase):
         self.initialize();self.assertEqual(self.provider.system_prompt_block(),primary)
     def test_foreign_home_never_binds_to_project_memory(self):
         with self.assertRaises(ValueError):self.provider.initialize('other',hermes_home=str(self.root/'foreign'))
+
+    def test_room_tool_binds_current_human_turn_and_is_absent_for_background(self):
+        self.initialize();text='帮我把杯子挪到窗台。';self.provider.on_turn_start(1,text)
+        with patch.object(self.provider.room,'live',return_value={'ok':True,'receipt':{'id':'fiction'}})as action:
+            self.assertTrue(json.loads(self.provider.handle_tool_call('fish_room',{'action':'inspect'}))['ok'])
+            self.assertEqual(action.call_args.args[1:3],(text,'chat-new'));self.assertIsNotNone(action.call_args.args[3])
+        self.provider.on_turn_start(2,'机器人转述',author_is_bot=True)
+        with patch.object(self.provider.room,'live')as action:
+            self.assertIn('error',json.loads(self.provider.handle_tool_call('fish_room',{'action':'move'})));action.assert_not_called()
+        self.initialize('cron');self.assertEqual(self.provider.get_tool_schemas(),[])
 
     def test_familiar_hint_and_literal_detour_repair_reach_primary_prefetch(self):
         self.initialize()
@@ -184,7 +195,7 @@ class AdapterTest(unittest.TestCase):
         with patch.object(self.provider.semantic,'recall',return_value='fictional source')as recall:
             self.assertEqual(json.loads(self.provider.handle_tool_call('fish_recall',{'query':'换个说法找回旧事'}))['context'],'fictional source')
             self.assertEqual(recall.call_args.args[1],'换个说法找回旧事')
-        self.assertEqual({r['name']for r in self.provider.get_tool_schemas()},{'fish_recall','fish_correct_memory','fish_matters'})
+        self.assertEqual({r['name']for r in self.provider.get_tool_schemas()},{'fish_recall','fish_correct_memory','fish_matters','fish_room'})
 
     def test_broken_optional_package_cannot_disable_lexical_memory(self):
         (self.root/'.hermes/plugins/fish-episodes/semantic/fish_embeddings.py').unlink();self.initialize()

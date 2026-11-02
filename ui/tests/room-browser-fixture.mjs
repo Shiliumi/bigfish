@@ -9,6 +9,7 @@ const server=await createServer({configFile:false,root:ui,esbuild:{jsx:'automati
     let body='';if(['PUT','POST'].includes(req.method)){for await(const chunk of req){body+=chunk;if(Buffer.byteLength(body)>3*1024*1024)throw Error('夹具请求过大');}}
     if(req.url==='/api/companion')return json(200,{state:'idle',label:'在小屋里待着呢'});
     if(req.url==='/api/room')return json(200,req.method==='PUT'?await room.update(JSON.parse(body)):await room.snapshot());
+    if(req.url==='/api/room/actions'&&req.method==='POST')return json(200,await room.move(JSON.parse(body)));
     if(req.url==='/api/room/photos'&&req.method==='POST')return json(201,await room.photo(JSON.parse(body)));
     const photo=req.url.match(/^\/api\/room\/photos\/(ph-[a-f0-9]{24})(\/image)?$/);if(photo){if(photo[2]){res.setHeader('Content-Type','image/png');return res.end(await room.image(photo[1]));}return json(200,await room.detail(photo[1]));}
     return json(404,{error:'此接口没有隔离夹具'});
