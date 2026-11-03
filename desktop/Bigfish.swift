@@ -1,6 +1,7 @@
 import Cocoa
 import WebKit
 import UserNotifications
+import UniformTypeIdentifiers
 
 final class FishDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHandler, UNUserNotificationCenterDelegate {
     var window: NSWindow!
@@ -289,6 +290,7 @@ final class FishDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKN
         guard message.frameInfo.isMainFrame, let url = message.frameInfo.request.url, localURL(url), let body = message.body as? [String: String] else { return }
         if body["type"] == "app.folder", let folder = body["folder"], let relative = ["reports":"reports", "memory":".hermes/memories", "logs":".setup"][folder] { NSWorkspace.shared.open(URL(fileURLWithPath: root + "/" + relative)) }
         if body["type"] == "notifications.status" { publishNotificationStatus() }
+        if body["type"] == "room.export-photo", let id = body["id"], id.range(of: "^ph-[a-f0-9]{24}$", options: .regularExpression) != nil { exportRoomPhoto(id) }
         if body["type"] == "ui.presence" { recordActivity(publish: false) }
         if body["type"] == "ui.ready" { loaded = true; uiReady = true; pageNeedsRecovery = false; recoveryAttempts = 0; recoveryOverlay?.removeFromSuperview(); recoveryOverlay = nil; publishPetStatus(); publishWindowVisibility(); openPendingPanel(); openPendingSettings(); if let text = pendingPetText { pendingPetText = nil; sendPet(text) } }
         if body["type"] == "notifications.request" { requestNotifications() }
@@ -303,6 +305,17 @@ final class FishDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKN
         if body["type"] == "pet.dock.toggle" { pet.toggleAutoDock() }
         if body["type"] == "pet.peek.toggle" { pet.togglePeek() }
         if body["type"] == "pet.greeting.preview" { pet.previewGreeting() }
+    }
+    func exportRoomPhoto(_ id: String) {
+        let panel = NSSavePanel(); panel.title = "导出小屋照片"; panel.allowedContentTypes = [.png]; panel.canCreateDirectories = true; panel.nameFieldStringValue = "大肥鱼小屋-\(id.suffix(6)).png"
+        panel.beginSheetModal(for: window) { [weak self] result in
+            guard let self = self, result == .OK, let target = panel.url else { return }
+            self.network.dataTask(with: self.desktopRequest(self.base.appendingPathComponent("api/room/photos/\(id)/download"))) { data, response, _ in
+                var ok = false
+                if let data = data, (response as? HTTPURLResponse)?.statusCode == 200, data.count <= 2 * 1024 * 1024, data.prefix(8) == Data([137,80,78,71,13,10,26,10]) { do { try data.write(to: target, options: .atomic); ok = true } catch {} }
+                DispatchQueue.main.async { self.web.evaluateJavaScript("window.dispatchEvent(new CustomEvent('fish:room-export',{detail:{ok:\(ok ? "true" : "false")}}))") }
+            }.resume()
+        }
     }
     func recordActivity(publish: Bool = true) {
         let now = Date(); interruptions.noteActivity(now: now)

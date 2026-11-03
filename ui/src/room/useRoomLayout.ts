@@ -26,6 +26,7 @@ export function useRoomLayout(watch=true){
     if(!saved||busy)return;setBusy(true);setError('')
     try{const value=await api<RoomSnapshot>('/room',{method:'PUT',body:JSON.stringify({action,revision:base,operation_id:crypto.randomUUID(),...(action==='save'?{layout:draft}:{}),...extra})});if(mounted.current)accept(value)}catch(e){if(mounted.current)setError((e as Error).message)}finally{if(mounted.current)setBusy(false)}
   }
+  async function refreshPhotos(){try{const value=await api<RoomSnapshot>('/room');if(mounted.current)setSaved(s=>s?{...s,photos:value.photos}:s)}catch{}}
   function rememberPhoto(photo:RoomPhoto){setSaved(s=>s?{...s,photos:[photo,...s.photos.filter(p=>p.id!==photo.id)].slice(0,24)}:s)}
-  return {saved,draft,setDraft,base,busy,error,setError,dirty,reload,update,rememberPhoto}
+  return {saved,draft,setDraft,base,busy,error,setError,dirty,reload,update,rememberPhoto,refreshPhotos}
 }

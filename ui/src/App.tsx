@@ -80,6 +80,7 @@ export default function App() {
   const petTurn = useRef(false), petResponse = useRef(''), petLastUpdate = useRef(0)
   const gateway = useRef(new FishGateway()), sid = useRef(''), storedId = useRef(''), replyId = useRef(''), chatScroll = useRef<HTMLDivElement>(null), followChat = useRef(true), inputRef = useRef<HTMLTextAreaElement>(null), busyRef = useRef(false), didRestore = useRef(false), switching = useRef(false)
   const notify = (message: string) => setToast(message)
+  useEffect(()=>{const exported=(e:Event)=>notify((e as CustomEvent).detail?.ok?'照片已导出。':'照片没有导出成功，请检查文件是否仍在或换个保存位置。');window.addEventListener('fish:room-export',exported);return()=>window.removeEventListener('fish:room-export',exported)},[])
   useEffect(() => { localStorage.setItem('fish.page', page) }, [page])
   useEffect(() => { if (editor) localStorage.setItem('fish.editorDraft', JSON.stringify({key:editor,content:draft,version:editorVersion.current})); else localStorage.removeItem('fish.editorDraft') }, [editor,draft])
   useEffect(() => { (window as any).__FISH_UI_READY__ = true; (window as any).webkit?.messageHandlers.fish.postMessage({type:'ui.ready'}); return () => { (window as any).__FISH_UI_READY__ = false } }, [])

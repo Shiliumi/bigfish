@@ -21,6 +21,8 @@ test('private data requires a local session cookie',async()=>{
   assert.equal((await fetch(BASE+'/api/budget')).status,401);
   assert.equal((await fetch(BASE+'/api/room')).status,401);
   assert.equal((await fetch(BASE+'/api/room/context')).status,401);
+  assert.equal((await fetch(BASE+'/api/room/contents')).status,401);
+  assert.equal((await fetch(BASE+'/api/room/library')).status,401);
   assert.equal((await fetch(BASE+'/api/room/actions',{method:'POST',body:'{}'})).status,401);
   assert.equal((await fetch(BASE+'/api/room/photos/ph-'+'0'.repeat(24)+'/image')).status,401);
 });
@@ -36,6 +38,9 @@ test('room snapshots and photos inherit desktop authentication and mutation prot
   assert.equal((await fetch(BASE+'/api/room',{headers:{...headers,'X-Fish-Room-Project':'foreign-profile'}})).status,403);
   assert.equal((await fetch(BASE+'/api/room/actions',{method:'POST',headers:{...headers,Origin:'https://example.org'},body:'{}'})).status,403);
   const context=await(await fetch(BASE+'/api/room/context',{headers})).json();assert.equal(context.movable_items.length,3);assert.ok(context.fixed_furnishings.some(v=>v.id==='plant'));assert.ok(context.fixed_furnishings.some(v=>v.id==='shelf'));
+  const library=await(await fetch(BASE+'/api/room/library',{headers})).json();assert.ok(Number.isInteger(library.revision));assert.ok(library.usage.max_bytes>0);
+  assert.equal((await fetch(BASE+'/api/room/library',{method:'PUT',headers,body:JSON.stringify({action:'trash',id:'ph-'+'0'.repeat(24),revision:-1,operation_id:crypto.randomUUID()})})).status,409);
+  assert.equal((await fetch(BASE+'/api/room/collection',{method:'PUT',headers:{...headers,Origin:'https://example.org'},body:'{}'})).status,403);
   assert.equal((await fetch(BASE+'/api/room/capture',{method:'POST',headers:roomHeaders,body:JSON.stringify({operation_id:crypto.randomUUID(),revision:-1,view:'room'})})).status,409);
   assert.equal((await fetch(BASE+'/api/room/capture',{method:'POST',headers,body:'{}'})).status,403);
   assert.equal((await fetch(BASE+'/api/room/render/complete',{method:'POST',headers,body:JSON.stringify({id:crypto.randomUUID(),lease:crypto.randomUUID(),image:'not pixels'})})).status,409);

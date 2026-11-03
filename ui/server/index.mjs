@@ -18,6 +18,7 @@ import { createUsage } from './usage.mjs';
 import { journal, learningScript } from './journal.mjs';
 import {createRoomStore} from './room.mjs';
 import {createRoomCapture} from './room-capture.mjs';
+import {createRoomContents} from './room-contents.mjs';
 
 const UI = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const ROOT = path.dirname(UI), HOME = path.join(ROOT, '.hermes');
@@ -28,6 +29,7 @@ const hermesPanel = createHermesPanel(native,{renameChat:async(id,title)=>rename
 const usage = createUsage(ROOT,native);
 const room = createRoomStore(ROOT);
 const roomCapture=createRoomCapture(room);
+const roomContents=createRoomContents(ROOT,{readMemories:()=>journal(ROOT,{q:'',scope:'current',limit:3})});
 const roomProject=createHash('sha256').update(await realpath(ROOT)).digest('hex');
 const documents = { memory: path.join(HOME,'memories/MEMORY.md'), user: path.join(HOME,'memories/USER.md'), interests: path.join(ROOT,'INTERESTS.md'), soul: path.join(HOME,'SOUL.md') };
 let nativeToken = '', tokenTime = 0, vite;
@@ -111,6 +113,10 @@ async function handleAPI(req,res,url) {
   if(name.startsWith('/api/room')&&req.headers['x-fish-room-project']&&req.headers['x-fish-room-project']!==roomProject)fail('小屋不属于当前项目。',403);
   if(name==='/api/room'&&req.method==='GET')return json(res,200,await room.snapshot());
   if(name==='/api/room/context'&&req.method==='GET')return json(res,200,await room.context());
+  if(name==='/api/room/contents'&&req.method==='GET')return json(res,200,await roomContents.snapshot());
+  if(name==='/api/room/collection'&&req.method==='PUT')return json(res,200,await roomContents.collect(await body(req)));
+  if(name==='/api/room/library'&&req.method==='GET')return json(res,200,await room.library(url.searchParams.get('scope')||'active',Number(url.searchParams.get('offset')||0)));
+  if(name==='/api/room/library'&&req.method==='PUT')return json(res,200,await room.managePhoto(await body(req)));
   if(name==='/api/room/environment'&&req.method==='GET')return json(res,200,await room.atmosphere());
   if(name==='/api/room/environment'&&req.method==='PUT')return json(res,200,await room.setAtmosphere(await body(req)));
   if(name==='/api/room/capture'&&req.method==='POST'){if(req.headers['x-fish-room-project']!==roomProject)fail('房间拍照需要当前项目标识。',403);return json(res,200,await roomCapture.request(await body(req)));}
@@ -119,10 +125,10 @@ async function handleAPI(req,res,url) {
   if(name==='/api/room'&&req.method==='PUT')return json(res,200,await room.update(await body(req)));
   if(name==='/api/room/actions'&&req.method==='POST'){if(req.headers['x-fish-room-project']!==roomProject)fail('房间动作需要当前项目标识。',403);return json(res,200,await room.move(await body(req)));}
   if(name==='/api/room/photos'&&req.method==='POST')return json(res,201,await room.photo(await body(req,3*1024*1024)));
-  const roomPhoto=name.match(/^\/api\/room\/photos\/(ph-[a-f0-9]{24})(\/image)?$/);
+  const roomPhoto=name.match(/^\/api\/room\/photos\/(ph-[a-f0-9]{24})(\/image|\/download)?$/);
   if(roomPhoto&&req.method==='GET'){
     if(!roomPhoto[2])return json(res,200,await room.detail(roomPhoto[1]));
-    const bytes=await room.image(roomPhoto[1]);res.writeHead(200,{'Content-Type':'image/png','Cache-Control':'private, max-age=86400','X-Content-Type-Options':'nosniff'});return res.end(bytes);
+    const bytes=await room.image(roomPhoto[1]);res.writeHead(200,{'Content-Type':'image/png','Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff',...(roomPhoto[2]==='/download'?{'Content-Disposition':'attachment; filename="bigfish-'+roomPhoto[1]+'.png"'}:{})});return res.end(bytes);
   }
   if(name==='/api/usage' && req.method==='GET') return json(res,200,await usage.snapshot(url.searchParams.get('days')));
   if(name==='/api/budget' && req.method==='GET') return json(res,200,await learningScript(ROOT,'fish_budget.py',{action:'snapshot'}));

@@ -1,0 +1,23 @@
+import {useEffect,useRef,useState} from 'react'
+import {api} from '../api'
+interface Reading {id:string;title:string;url:string;read_at:string;excerpt:string;saved:boolean;source:{report_path:string};unavailable?:boolean}
+interface Memory {id:string;summary:string;recorded_at:string;revision:number;pinned:boolean}
+interface Contents {revision:number;readings:Reading[];favorites:Reading[];memories:Memory[];reading_status:string;memory_status:string}
+export default function RoomContents({kind,onMemory}:{kind:'desk'|'memory';onMemory:()=>void}){
+  const [data,setData]=useState<Contents|null>(null),[error,setError]=useState(''),[busy,setBusy]=useState(false),[tab,setTab]=useState('readings'),[detail,setDetail]=useState<{id:string;revision:number;summary:string;excerpt:string;source_ref:string}|null>(null),sequence=useRef(0),detailSequence=useRef(0),detailRef=useRef(detail)
+  detailRef.current=detail
+  async function load(){const n=++sequence.current;try{const value=await api<Contents>('/room/contents');if(n===sequence.current){if(detailRef.current&&!value.memories.some(row=>row.id===detailRef.current?.id&&row.revision===detailRef.current?.revision)){detailSequence.current++;setDetail(null)}setData(value);setError('')}}catch(e){if(n===sequence.current){setData(null);setDetail(null);detailSequence.current++;setError((e as Error).message)}}}
+  useEffect(()=>{void load();const refresh=()=>{if(!document.hidden&&(window as any).__FISH_WINDOW_VISIBLE__!==false)void load()},changed=()=>{detailSequence.current++;setDetail(null);refresh()};const timer=setInterval(refresh,10000);window.addEventListener('fish.memory.changed',changed);window.addEventListener('fish:window-visibility',refresh);return()=>{sequence.current++;detailSequence.current++;clearInterval(timer);window.removeEventListener('fish.memory.changed',changed);window.removeEventListener('fish:window-visibility',refresh)}},[])
+  async function collect(row:Reading){if(!data||busy)return;setBusy(true);try{setData(await api<Contents>('/room/collection',{method:'PUT',body:JSON.stringify({revision:data.revision,id:row.id,saved:!row.saved})}));setError('')}catch(e){setError((e as Error).message);void load()}finally{setBusy(false)}}
+  async function openMemory(row:Memory){const n=++detailSequence.current;try{const value=await api<any>('/episodes/'+row.id);if(n!==detailSequence.current)return;if(value.effective_status!=='active'){setDetail(null);setError('这段记忆已过时，正在重新读取。');void load();return}setDetail({id:value.id,revision:value.revision,summary:value.summary,excerpt:value.excerpt,source_ref:value.source_ref});setError('')}catch{if(n===detailSequence.current){setDetail(null);setError('这段来源已变化或遗忘，请重新查看。');void load()}}}
+  if(!data)return <div className="room-contents"><p>{error||'正在翻翻本机记录…'}</p>{error&&<button onClick={()=>void load()}>重新读取</button>}</div>
+  return <div className="room-contents">
+    {kind==='desk'?<><div className="room-content-tabs"><button aria-pressed={tab==='readings'} onClick={()=>setTab('readings')}>最近读过</button><button aria-pressed={tab==='favorites'} onClick={()=>setTab('favorites')}>收藏 · {data.favorites.length}</button></div>
+      {data.reading_status!=='ready'&&<p role="status">阅读来源暂不可用，已有收藏仍保留。</p>}
+      {(tab==='readings'?data.readings:data.favorites).map(row=><article key={row.id}>{row.unavailable?<><p>这条收藏的阅读来源暂不可核对。</p><button disabled={busy} onClick={()=>void collect({...row,saved:true})}>移出收藏</button></>:<><a href={row.url} target="_blank" rel="noopener noreferrer">{row.title}</a><p>{row.excerpt||'已读取正文，未保存摘要。'}</p><small>{new Date(row.read_at).toLocaleString('zh-CN')} · {row.source.report_path}</small><button disabled={busy} onClick={()=>void collect(row)}>{row.saved?'取消收藏':'收藏这页'}</button></>}</article>)}
+      {!(tab==='readings'?data.readings:data.favorites).length&&<p>{tab==='readings'?'还没有可核对的正文阅读记录。':'喜欢的网页可以从“最近读过”加入收藏。'}</p>}</>:
+      <><strong>共同经历</strong>{data.memory_status!=='ready'?<p>记忆库暂时未连接，可以稍后再看。</p>:data.memories.length?data.memories.map(row=><article key={row.id}><button className="room-memory-card" onClick={()=>void openMemory(row)}>{row.summary}</button><small>{new Date(row.recorded_at).toLocaleDateString('zh-CN')} · {row.pinned?'已固定 · ':''}当前有效 · 查看来源</small></article>):<p>这里还没有当前有效的共同经历。</p>}
+      {detail&&<div className="room-memory-source"><strong>当前记法</strong><p>{detail.summary}</p><small>来源 {detail.source_ref}</small><details><summary>原始片段 · 历史核对用</summary><pre>{detail.excerpt}</pre></details><button onClick={()=>{setDetail(null);detailSequence.current++}}>收起来源</button></div>}<button onClick={onMemory}>打开记忆空间</button></>}
+    {error&&<p role="alert">{error}</p>}
+  </div>
+}
