@@ -1,7 +1,8 @@
 import { memo, useEffect, useRef, useState } from 'react'
 import { ArrowUpRight, CloudRain, Lamp, Lock, Unlock, Moon, RotateCcw, SlidersHorizontal, Plus, Minus, Camera, Move, Save, Undo2, RotateCw, Snowflake, Sun, Sunset, X } from 'lucide-react'
 import { api } from '../api'
-import { PetVideo } from '../Companion'
+import {roomIntent} from './life-motion.mjs'
+import RoomLife from './RoomLife'
 import { createRoom, type RoomScene } from './scene'
 import { roomActivity, roomEnvironment } from './environment.mjs'
 import {objects,surfaces,placeObject,type ObjectId} from './layout.mjs'
@@ -40,7 +41,8 @@ function RoomPage({onNavigate,onAttachPhoto,onOpenStarMap}:{onOpenStarMap?:()=>v
   const setWeather=(weather:string)=>atmosphere.setValue(v=>({...v,weather:weather as typeof v.weather}))
   const setLamp=(update:(lamp:boolean)=>boolean)=>atmosphere.setValue(v=>({...v,lamp:update(v.lamp)}))
   const [settings,setSettings]=useState(false), [selected,setSelected]=useState<string|null>(null)
-  const [manifest,setManifest]=useState<Manifest|null>(null), [activity,setActivity]=useState({animation:'idle',label:'正在看看她在忙什么…'})
+  const lastPublished=useRef('')
+  const [resident,setResident]=useState({pose:'idle',goal:'rug'}),[mode,setMode]=useState(()=>{try{const value=localStorage.getItem('fish.room.activity');return ['auto','walk','desk','sleep'].includes(value||'')?value!:'auto'}catch{return 'auto'}}),[runtime,setRuntime]=useState('idle'),[activity,setActivity]=useState({animation:'idle',label:'正在看看她在忙什么…'})
   const [visible,setVisible]=useState(()=>!document.hidden&&(window as any).__FISH_WINDOW_VISIBLE__!==false)
   const [minute,setMinute]=useState(Date.now()), [greeting,setGreeting]=useState(false)
   const sceneEnvironment=roomEnvironment(period,weather,new Date(minute))
@@ -48,7 +50,7 @@ function RoomPage({onNavigate,onAttachPhoto,onOpenStarMap}:{onOpenStarMap?:()=>v
   useEffect(()=>{
     if(!host.current)return
     setFailed(false);setContextLost(false)
-    try { engine.current=createRoom(host.current,{select:setSelected,project:(x,y,size)=>{if(character.current){character.current.style.left=x+'px';character.current.style.top=y+'px';character.current.style.width=Math.max(70,size*1.13)+'px'}},lost:()=>setContextLost(true),restored:()=>setContextLost(false),move:room.setDraft,notice:setNotice}) }
+    try { engine.current=createRoom(host.current,{select:setSelected,project:(x,y,size)=>{if(character.current){character.current.style.left=x+'px';character.current.style.top=y+'px';character.current.style.width=Math.max(70,size*1.13)+'px'}},lost:()=>setContextLost(true),restored:()=>setContextLost(false),move:room.setDraft,notice:setNotice,touch:()=>setGreeting(true)}) }
     catch {setFailed(true)}
     return()=>{engine.current?.dispose();engine.current=null}
   },[generation])
@@ -63,23 +65,23 @@ function RoomPage({onNavigate,onAttachPhoto,onOpenStarMap}:{onOpenStarMap?:()=>v
   useEffect(()=>{
     if(!visible)return
     const controller=new AbortController();let pending=false
-    async function poll(){if(pending)return;pending=true;try{const state=await api<{state:string;label:string}>('/companion',{signal:controller.signal});if(!controller.signal.aborted)setActivity(roomActivity(state))}catch{if(!controller.signal.aborted)setActivity({animation:'look',label:'暂时联系不上鱼塘，房间还在'})}finally{pending=false}}
+    async function poll(){if(pending)return;pending=true;try{const state=await api<{state:string;label:string}>('/companion',{signal:controller.signal});if(!controller.signal.aborted){setActivity(roomActivity(state));setRuntime(state.state)}}catch{if(!controller.signal.aborted)setActivity({animation:'look',label:'暂时联系不上鱼塘，房间还在'})}finally{pending=false}}
     void poll();const timer=setInterval(()=>void poll(),15_000);return()=>{controller.abort();clearInterval(timer)}
   },[visible])
-  useEffect(()=>{const controller=new AbortController();fetch('/pet/manifest.json',{signal:controller.signal}).then(r=>{if(!r.ok)throw Error();return r.json()}).then(setManifest).catch(()=>{});return()=>controller.abort()},[])
-  useEffect(()=>{if(!greeting)return;const timer=setTimeout(()=>setGreeting(false),(manifest?.animations.greeting?.duration||10)*1000);return()=>clearTimeout(timer)},[greeting,manifest])
+  useEffect(()=>{try{localStorage.setItem('fish.room.activity',mode)}catch{}engine.current?.behavior(roomIntent(runtime,mode,new Date(minute)))},[runtime,mode,minute,generation])
+  useEffect(()=>{if(!greeting)return;const timer=setTimeout(()=>setGreeting(false),3200);return()=>clearTimeout(timer)},[greeting])
+  useEffect(()=>{window.dispatchEvent(new CustomEvent('fish.room.editing',{detail:editing}));return()=>{window.dispatchEvent(new CustomEvent('fish.room.editing',{detail:false}))}},[editing])
+  useEffect(()=>{if(!visible)return;const publish=()=>{const state=engine.current?.residentState();if(state){setResident(old=>old.pose===state.pose&&old.goal===state.goal?old:{pose:state.pose,goal:state.goal});const key=JSON.stringify([state.pose,state.goal,mode,Math.floor(Date.now()/15000)]);if(lastPublished.current!==key){lastPublished.current=key;window.dispatchEvent(new CustomEvent('fish.room.pose',{detail:{pose:state.pose,goal:state.goal,mode}}))}}};publish();const timer=setInterval(publish,1000);return()=>{clearInterval(timer);window.dispatchEvent(new CustomEvent('fish.room.pose',{detail:null}))}},[visible,mode,generation])
   function place(surface:string){if(!selected||!(selected in objects))return;const id=selected as ObjectId,[x,z]=objects[id].presets[surface];try{room.setDraft(placeObject(room.draft,id,{surface,x,z,rotation:room.draft[id].rotation}));room.setError('')}catch(e){room.setError((e as Error).message)}}
   function rotate(){if(!selected||!(selected in objects))return;const id=selected as ObjectId;try{room.setDraft(placeObject(room.draft,id,{...room.draft[id],rotation:(room.draft[id].rotation+90)%360}));room.setError('')}catch(e){room.setError((e as Error).message)}}
   async function capture(view:'room'|'window'){
     if(!room.saved||room.dirty||taking||room.busy||!atmosphere.ready)return;setTaking(true);room.setError('')
     try{
-      let source=character.current?.querySelector('video,img') as HTMLVideoElement|HTMLImageElement|null
-      if(!source||source instanceof HTMLVideoElement&&source.readyState<2){const fallback=new Image();fallback.src='/pet/idle-poster.png';await fallback.decode();source=fallback}
       const environment={period:sceneEnvironment.period,weather,lamp},current=engine.current
       if(!current)throw Error('小屋还没有准备好。')
-      current.layout(room.saved.layout);current.environment(roomEnvironment(period,weather,new Date(minute)),lamp)
+      await current.ready;current.layout(room.saved.layout);current.environment(roomEnvironment(period,weather,new Date(minute)),lamp)
       const old=pendingPhoto.current
-      if(!old||old.revision!==room.base||old.view!==view||JSON.stringify(old.environment)!==JSON.stringify(environment))pendingPhoto.current={operation_id:crypto.randomUUID(),revision:room.base,view,environment,image:current.photo(view,source)}
+      if(!old||old.revision!==room.base||old.view!==view||JSON.stringify(old.environment)!==JSON.stringify(environment))pendingPhoto.current={operation_id:crypto.randomUUID(),revision:room.base,view,environment,image:current.photo(view)}
       const result=await api<RoomPhoto>('/room/photos',{method:'POST',body:JSON.stringify(pendingPhoto.current)});pendingPhoto.current=null;room.rememberPhoto(result);setPhoto(result)
     }catch(e){room.setError((e as Error).message)}finally{setTaking(false)}
   }
@@ -90,21 +92,23 @@ function RoomPage({onNavigate,onAttachPhoto,onOpenStarMap}:{onOpenStarMap?:()=>v
     <div className="room-actions"><button className={'room-button '+(editing?'selected':'')} aria-pressed={editing} onClick={()=>setEditing(v=>!v)} disabled={!room.saved||room.busy||taking}><Move size={16}/>{editing?'结束布置':'布置小屋'}</button>{(editing||room.dirty)&&<><button className="room-button" disabled={!room.dirty||room.busy||taking} onClick={()=>void room.update('save')}><Save size={15}/>{room.busy?'正在保存…':'保存布置'}</button><button className="room-button" disabled={!room.saved?.can_undo||room.dirty||room.busy||taking} onClick={()=>void room.update('undo')}><Undo2 size={15}/>撤销上次保存</button><button className="room-text-link" disabled={room.busy} onClick={()=>void room.reload()}>读取已保存布置</button><button className="room-text-link" disabled={room.busy||taking} onClick={()=>void room.update('reset')}>恢复默认</button></>}<div className="room-photo-actions"><button className="room-button" disabled={!room.saved||room.dirty||taking||room.busy||failed||contextLost||!atmosphere.ready} onClick={()=>void capture('room')}><Camera size={16}/>{taking?'拍照中…':'拍张全景'}</button><button className="room-button" disabled={!room.saved||room.dirty||taking||room.busy||failed||contextLost||!atmosphere.ready} onClick={()=>void capture('window')}>拍窗边</button></div></div>
     {(room.error||atmosphere.error||notice||room.dirty)&&<div className="room-notice" role={room.error?'alert':'status'}>{room.error||atmosphere.error||notice||'布置还没有保存，草稿会留在本机。保存后就可以拍照。'}{room.error&&<button onClick={()=>void room.reload()} disabled={room.busy}>重新读取</button>}</div>}
     {editing&&<div className="room-edit-palette" role="group" aria-label="选择要布置的物品">{(Object.keys(objects) as ObjectId[]).map(id=><button key={id} aria-pressed={selected===id} onClick={()=>setSelected(id)}>{objects[id].label}</button>)}<span>可以拖动物品，或点物品选择放置位置。</span></div>}
+    <div className="room-life-controls" role="group" aria-label="小屋人物活动">{[{id:'auto',text:'随她活动'},{id:'walk',text:'屋里走走'},{id:'desk',text:'去电脑前'},{id:'sleep',text:'去床上歇会儿'}].map(item=><button className={'room-button '+(mode===item.id?'selected':'')} key={item.id} aria-pressed={mode===item.id} onClick={()=>setMode(item.id)}>{item.text}</button>)}<span>{mode==='auto'?'真实工作时去桌前，凌晨空闲时休息；其余时候在屋里走走。':'手选会保留，点“随她活动”恢复自动；不启动或停止后台任务。'}</span></div>
     <div className="room-card">
       <div className="room-scene-label"><span className="room-dot"/>{sceneEnvironment.label}<span className="room-scene-number">海边小屋</span></div>
-      <div className="room-stage" ref={host} data-period={sceneEnvironment.period}>
+      <div className="room-stage" ref={host} data-period={sceneEnvironment.period} data-pose={resident.pose} data-goal={resident.goal}>
         <div ref={character} className="room-character-anchor" hidden={failed||contextLost}>
         <button className="room-character" aria-label="摸摸大肥鱼" onClick={()=>setGreeting(true)}>
           {greeting&&<span className="room-hello">爹，进来坐会儿？</span>}
-          {manifest&&visible?<PetVideo animation={greeting?'greeting':activity.animation} manifest={manifest}/>:<img src="/pet/idle-poster.png" alt="大肥鱼"/>}
+          <span className="room-touch-target" aria-hidden="true"/>
         </button></div>
         {(failed||contextLost)&&<div className="room-recovery" role="alert"><Moon size={28}/><strong>{contextLost?'小屋的画面暂停了':'小屋画面暂时没有打开'}</strong><p>可以重新打开画面，聊天和记忆仍然保留。</p><button className="room-button" onClick={()=>setGeneration(v=>v+1)}><RotateCcw size={15}/>重新打开小屋</button></div>}
         {slot&&<aside className="room-inspect" aria-label={slot.title}><button className="room-inspect-close" aria-label="关闭物品介绍" onClick={()=>setSelected(null)}><X size={16}/></button><span className="room-eyebrow">A LITTLE CORNER</span><h2>{slot.title}</h2><p>{slot.description}</p>{!editing&&(selected==='desk'||selected==='book'||selected==='shelf')&&<RoomContents key={selected} kind={selected==='desk'?'desk':'memory'} onMemory={()=>onNavigate('memory')}/>}{editing&&selected&&selected in objects&&<div className="room-placement"><span>放到</span>{objects[selected as ObjectId].surfaces.map(surface=><button key={surface} disabled={room.busy||taking} aria-pressed={room.draft[selected as ObjectId].surface===surface} onClick={()=>place(surface)}>{surfaces[surface].label}</button>)}<button onClick={rotate} disabled={room.busy||taking}><RotateCw size={14}/>转 90°</button><button disabled={room.dirty||room.busy||taking} aria-pressed={room.saved?.locks[selected as ObjectId]||false} onClick={()=>void room.update('lock',{object:selected!,locked:!room.saved?.locks[selected as ObjectId]})}>{room.saved?.locks[selected as ObjectId]?<Lock size={14}/>:<Unlock size={14}/>}不让她挪</button></div>}{selected==='lamp'&&<button className="room-button" aria-pressed={lamp} onClick={()=>setLamp(v=>!v)}><Lamp size={15}/>{lamp?'关掉台灯':'打开台灯'}</button>}{selected==='shelf'&&onOpenStarMap&&<button className="room-text-link" onClick={onOpenStarMap}>打开记忆星图<ArrowUpRight size={15}/></button>}{slot.destination&&<button className="room-text-link" onClick={()=>onNavigate(slot.destination!)}>{slot.link}<ArrowUpRight size={15}/></button>}</aside>}
       </div>
       <footer className="room-scene-toolbar"><span>拖动转视角 · ⌘/Ctrl + 滚轮缩放</span><div><button className="room-icon" aria-label="缩小小屋" onClick={()=>engine.current?.zoom(-.1)}><Minus size={16}/></button><button className="room-icon" aria-label="放大小屋" onClick={()=>engine.current?.zoom(.1)}><Plus size={16}/></button><button className="room-icon" aria-label={lamp?'关掉小屋台灯':'打开小屋台灯'} aria-pressed={lamp} onClick={()=>setLamp(v=>!v)}><Lamp size={17}/></button><button className="room-icon" aria-label="恢复小屋视角" onClick={()=>engine.current?.reset()}><RotateCcw size={16}/></button></div></footer>
     </div>
-    <div className="room-bottom"><div className="room-presence"><img src="/pet/idle-poster.png" alt=""/><div><span>她这会儿</span><strong>{activity.label}</strong></div><button className="room-text-link" onClick={()=>onNavigate('chat')}>和她聊聊<ArrowUpRight size={16}/></button></div><div className="room-corners" role="group" aria-label="看看房间里的角落"><button onClick={()=>setSelected('desk')}>书桌</button><button onClick={()=>setSelected('shelf')}>书架</button><button onClick={()=>setSelected('window')}>窗边</button></div></div>
+    <div className="room-bottom"><div className="room-presence"><img src="/pet/idle-poster.png" alt=""/><div><span>她这会儿</span><strong>{resident.pose==='walk'?'在屋里溜达':resident.pose==='sit'?(['surfing','working'].includes(runtime)?'在电脑前 · '+activity.label:'在电脑前坐坐'):resident.pose==='sleep'?'在床上睡会儿':activity.label}</strong></div><button className="room-text-link" onClick={()=>onNavigate('chat')}>和她聊聊<ArrowUpRight size={16}/></button></div><div className="room-corners" role="group" aria-label="看看房间里的角落"><button onClick={()=>setSelected('desk')}>书桌</button><button onClick={()=>setSelected('shelf')}>书架</button><button onClick={()=>setSelected('window')}>窗边</button></div></div>
     {!!room.saved?.actions.length&&<div className="room-action-note"><span>最近的布置</span>{room.saved.actions.slice(0,3).map(a=><p key={a.id}>{a.actor==='assistant'?'她':'你'}把{objects[a.object].label}放到了{surfaces[a.to.surface].label}<time>{new Date(a.created_at).toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit'})}</time></p>)}</div>}
+    <RoomLife/>
     <RoomAlbum recent={room.saved?.photos||[]} incoming={photo} onIncomingClose={()=>setPhoto(null)} onAttachPhoto={onAttachPhoto} onChanged={()=>void room.refreshPhotos()}/>
     <p className="room-footnote">小屋里的光、雨和日常动作在本机运行。角色与动画署名见应用「关于大肥鱼」。</p>
   </section>

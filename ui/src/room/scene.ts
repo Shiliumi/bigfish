@@ -7,8 +7,9 @@ import { roomFrustum } from './environment.mjs'
 import { weatherParticles, precipitationPosition } from './precipitation.mjs'
 import { defaultLayout,objects,surfaces,placeObject,type Layout,type ObjectId } from './layout.mjs'
 import {roomItems} from './model.mjs'
+import {roomCharacter} from './character'
 
-type Options = {select:(id:string)=>void; project:(x:number,y:number,size:number)=>void; lost:()=>void; restored:()=>void;move?:(layout:Layout)=>void;notice?:(text:string)=>void}
+type Options = {select:(id:string)=>void; project:(x:number,y:number,size:number)=>void; lost:()=>void; restored:()=>void;move?:(layout:Layout)=>void;notice?:(text:string)=>void;touch?:()=>void}
 
 export function createRoom(host:HTMLDivElement, options:Options) {
   const scene = new T.Scene()
@@ -18,6 +19,7 @@ export function createRoom(host:HTMLDivElement, options:Options) {
   renderer.outputColorSpace = T.SRGBColorSpace; renderer.toneMapping = T.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.05
   renderer.domElement.setAttribute('aria-label','三维小屋，可拖动转动视角，点击家具查看')
   renderer.domElement.setAttribute('role','img'); host.prepend(renderer.domElement)
+  const resident=roomCharacter(scene)
   const camera = new T.OrthographicCamera(-6,6,5,-5,.1,70)
   camera.position.set(10,8.8,12)
   const controls = new OrbitControls(camera, renderer.domElement)
@@ -195,8 +197,8 @@ export function createRoom(host:HTMLDivElement, options:Options) {
     skyTexture.needsUpdate=true
   }
   function project() {
-    const feet=new T.Vector3(.5,.09,1.15).project(camera)
-    const head=new T.Vector3(.5,1.8,1.15).project(camera)
+    const position=resident.state().position,feet=new T.Vector3(...position as [number,number,number]).project(camera)
+    const head=new T.Vector3(position[0],position[1]+1.65,position[2]).project(camera)
     options.project((feet.x+1)*width/2,(1-feet.y)*height/2,Math.abs(head.y-feet.y)*height/2)
   }
   function render() {
@@ -206,6 +208,7 @@ export function createRoom(host:HTMLDivElement, options:Options) {
   const reducedMotion=matchMedia('(prefers-reduced-motion: reduce)')
   const loop=createFrameLoop((dt)=>{
     if(!active||disposed||lost)return
+    resident.update(dt);dirtyFrame=true
     weatherTime+=dt
     if(environment.weather!=='clear'){
       for(let i=0;i<seeds.length;i++){
@@ -252,22 +255,27 @@ export function createRoom(host:HTMLDivElement, options:Options) {
     if(drag){e.stopImmediatePropagation();if(renderer.domElement.hasPointerCapture(e.pointerId))renderer.domElement.releasePointerCapture(e.pointerId);finishDrag();down=null;return}
     if(!down||Math.hypot(e.clientX-down[0],e.clientY-down[1])>5)return;down=null
     const bounds=renderer.domElement.getBoundingClientRect();pointer.set((e.clientX-bounds.left)/bounds.width*2-1,-(e.clientY-bounds.top)/bounds.height*2+1)
-    ray.setFromCamera(pointer,camera);const hit=ray.intersectObjects(targets,true)[0];if(!hit)return
+    ray.setFromCamera(pointer,camera);const hit=ray.intersectObjects([...targets,resident.sprite],true).find(h=>h.object!==resident.sprite||!!h.uv&&resident.hit(h.uv));if(!hit)return
+    if(hit.object===resident.sprite){resident.greet();options.touch?.();return}
     let object:T.Object3D|null=hit.object;while(object&&!object.userData.slot)object=object.parent
     if(object)options.select(object.userData.slot)
   }
   const onLost=(event:Event)=>{event.preventDefault();lost=true;finishDrag(true);loop.active(false);options.lost()}
   const onRestored=()=>{lost=false;renderer.shadowMap.needsUpdate=true;resize();loop.active(active&&!reducedMotion.matches);options.restored()}
-  const onMotion=()=>loop.active(active&&!lost&&!reducedMotion.matches)
+  const onMotion=()=>{resident.reduced();dirtyFrame=true;render();loop.active(active&&!lost&&!reducedMotion.matches)}
   reducedMotion.addEventListener('change',onMotion)
   renderer.domElement.addEventListener('pointerdown',onDown,true);renderer.domElement.addEventListener('pointermove',onMove,true);renderer.domElement.addEventListener('pointerup',onUp,true);renderer.domElement.addEventListener('pointercancel',onCancel)
   renderer.domElement.addEventListener('wheel',onWheel,{capture:true,passive:true})
   renderer.domElement.addEventListener('webglcontextlost',onLost);renderer.domElement.addEventListener('webglcontextrestored',onRestored)
   controls.addEventListener('change',()=>{if((!active||reducedMotion.matches)&&!disposed&&!lost&&environment){fit();project();renderer.render(scene,camera)}})
   resize()
+  void resident.ready.then(()=>{dirtyFrame=true;render()}).catch(()=>options.notice?.('角色素材暂未载入，可以重新打开小屋。'))
   return {
-    environment(env:RoomEnvironment, light:boolean) {environment=env;lampOn=light;scene.background=new T.Color(env.background);(ground.material as T.MeshStandardMaterial).color.set(env.background);ambient.intensity=env.ambient;sun.intensity=env.sun;sun.color.set(env.period==='dusk'?'#ffd3a3':'#fff2d8');lamp.intensity=lampOn?env.lamp:0;particles.visible=env.weather!=='clear';points.visible=env.weather==='snow';rain.visible=env.weather==='rain';sky(env);renderer.shadowMap.needsUpdate=true;render()},
-    active(value:boolean){if(active===value)return;active=value;if(!active)finishDrag(true);loop.active(active&&!lost&&!reducedMotion.matches);if(active)resize()},
+    ready:resident.ready,
+    behavior(intent:string,snap=false){resident.intent(intent,snap);dirtyFrame=true;render()},
+    residentState:()=>resident.state(),
+    environment(env:RoomEnvironment, light:boolean) {resident.color(env.period==='night'?'#b8c8df':env.period==='dusk'?'#f5e4d6':'#ffffff');environment=env;lampOn=light;scene.background=new T.Color(env.background);(ground.material as T.MeshStandardMaterial).color.set(env.background);ambient.intensity=env.ambient;sun.intensity=env.sun;sun.color.set(env.period==='dusk'?'#ffd3a3':'#fff2d8');lamp.intensity=lampOn?env.lamp:0;particles.visible=env.weather!=='clear';points.visible=env.weather==='snow';rain.visible=env.weather==='rain';sky(env);renderer.shadowMap.needsUpdate=true;render()},
+    active(value:boolean){if(active===value)return;active=value;resident.active(active);if(!active)finishDrag(true);loop.active(active&&!lost&&!reducedMotion.matches);if(active)resize()},
     layout(value:Layout){applyLayout(value);render()},
     editing(value:boolean){if(!value)finishDrag(true);editing=value},
     photo(view:'room'|'window',character?:CanvasImageSource){
@@ -279,12 +287,11 @@ export function createRoom(host:HTMLDivElement, options:Options) {
       // The default framebuffer applies the same tone mapping as the visible room.
       // Keep CSS dimensions fixed and restore the live frame before the browser can paint.
       try{renderer.setPixelRatio(1);renderer.setSize(w,h,false);renderer.render(scene,shot);context.drawImage(renderer.domElement,0,0,w,h)}finally{renderer.setPixelRatio(ratio);renderer.setSize(width,height,false);render()}
-      if(view==='room'&&character){const feet=new T.Vector3(.5,.09,1.15).project(shot),head=new T.Vector3(.5,1.8,1.15).project(shot),sw=Math.max(70,Math.abs(head.y-feet.y)*h/2*1.13),sh=sw*9/8;context.filter=environment.period==='night'?'brightness(.78) saturate(.88)':environment.period==='dusk'?'brightness(.94) sepia(.06)':'none';context.drawImage(character,(feet.x+1)*w/2-sw/2,(1-feet.y)*h/2-sh*.94,sw,sh)}
       return canvas.toDataURL('image/png')
     },
     reset(){controls.reset();render()},
     zoom(delta:number){camera.zoom=T.MathUtils.clamp(camera.zoom+delta,.85,1.35);camera.updateProjectionMatrix();render()},
-    dispose(){disposed=true;active=false;loop.dispose();observer.disconnect();controls.dispose();reducedMotion.removeEventListener('change',onMotion);renderer.domElement.removeEventListener('pointerdown',onDown,true);renderer.domElement.removeEventListener('pointermove',onMove,true);renderer.domElement.removeEventListener('pointerup',onUp,true);renderer.domElement.removeEventListener('pointercancel',onCancel);renderer.domElement.removeEventListener('wheel',onWheel,true);renderer.domElement.removeEventListener('webglcontextlost',onLost);renderer.domElement.removeEventListener('webglcontextrestored',onRestored);textures.forEach(x=>x.dispose());materials.forEach(x=>x.dispose());geometries.forEach(x=>x.dispose());renderer.dispose();renderer.forceContextLoss();renderer.domElement.remove()},
+    dispose(){disposed=true;active=false;resident.dispose();loop.dispose();observer.disconnect();controls.dispose();reducedMotion.removeEventListener('change',onMotion);renderer.domElement.removeEventListener('pointerdown',onDown,true);renderer.domElement.removeEventListener('pointermove',onMove,true);renderer.domElement.removeEventListener('pointerup',onUp,true);renderer.domElement.removeEventListener('pointercancel',onCancel);renderer.domElement.removeEventListener('wheel',onWheel,true);renderer.domElement.removeEventListener('webglcontextlost',onLost);renderer.domElement.removeEventListener('webglcontextrestored',onRestored);textures.forEach(x=>x.dispose());materials.forEach(x=>x.dispose());geometries.forEach(x=>x.dispose());renderer.dispose();renderer.forceContextLoss();renderer.domElement.remove()},
   }
 }
 export type RoomScene = ReturnType<typeof createRoom>

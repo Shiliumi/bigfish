@@ -19,6 +19,8 @@ import { journal, learningScript } from './journal.mjs';
 import {createRoomStore} from './room.mjs';
 import {createRoomCapture} from './room-capture.mjs';
 import {createRoomContents} from './room-contents.mjs';
+import {createRoomLife} from './room-life.mjs';
+import {roomIntent} from '../src/room/life-motion.mjs';
 
 const UI = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const ROOT = path.dirname(UI), HOME = path.join(ROOT, '.hermes');
@@ -28,7 +30,8 @@ const desktopAccess = await createDesktopAccess(ROOT,{keyPath:desktopKeyPath()})
 const hermesPanel = createHermesPanel(native,{renameChat:async(id,title)=>renameStoredChat(`ws://127.0.0.1:9119/api/ws?token=${encodeURIComponent(await getToken())}`,id,title)});
 const usage = createUsage(ROOT,native);
 const room = createRoomStore(ROOT);
-const roomCapture=createRoomCapture(room);
+const roomLife=createRoomLife(ROOT,{room,requirePresence:true,available:async()=>{const c=await companion(),letters=await inbox.snapshot(),hour=Number(new Intl.DateTimeFormat('en-GB',{timeZone:'Asia/Shanghai',hour:'2-digit',hourCycle:'h23'}).format(new Date())),{quietStart:a,quietEnd:b}=letters.settings;return !['thinking','working','surfing','offline'].includes(c.state)&&(a<b?hour<a||hour>=b:hour>=b&&hour<a)}});
+const roomCapture=createRoomCapture(room,{intent:async()=>{const c=await companion(),life=await roomLife.snapshot();return roomIntent(c.state,life.mode||'auto')}});
 const roomContents=createRoomContents(ROOT,{readMemories:()=>journal(ROOT,{q:'',scope:'current',limit:3})});
 const roomProject=createHash('sha256').update(await realpath(ROOT)).digest('hex');
 const documents = { memory: path.join(HOME,'memories/MEMORY.md'), user: path.join(HOME,'memories/USER.md'), interests: path.join(ROOT,'INTERESTS.md'), soul: path.join(HOME,'SOUL.md') };
@@ -50,7 +53,7 @@ const inbox = createInbox(ROOT,Date.now,{isBusy:()=>chatActivity().length>0});
 const models = createModelSettings(ROOT,{native,isBusy:()=>chatActivity().length>0});
 const balance = createBalance(ROOT,{connection:()=>models.balanceConnection(),onState:async state=>{const notice=balanceNotice(state,Date.now());if(notice)await inbox.queueLocal(notice);else if(['ready','unsupported'].includes(state.status))await inbox.cancelPending('balance');}});
 const balanceTimer=setInterval(()=>balance.refresh().catch(()=>{}),15*60000);balanceTimer.unref();void balance.refresh().catch(()=>{});
-const inboxTimer = setInterval(() => inbox.tick().catch(() => console.warn('来信检查失败，将在下一轮重试。')), 15000);
+const inboxTimer = setInterval(() => {void inbox.tick().catch(() => console.warn('来信检查失败，将在下一轮重试。'));void roomLife.tick().catch(()=>console.warn('小屋生活检查等待下一轮。'));}, 15000);
 inboxTimer.unref();
 void inbox.tick().catch(() => {});
 const json = (res, code, data) => { res.writeHead(code, {'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store'}); res.end(JSON.stringify(data)); };
@@ -112,7 +115,11 @@ async function handleAPI(req,res,url) {
   authorize(req);const name=url.pathname;
   if(name.startsWith('/api/room')&&req.headers['x-fish-room-project']&&req.headers['x-fish-room-project']!==roomProject)fail('小屋不属于当前项目。',403);
   if(name==='/api/room'&&req.method==='GET')return json(res,200,await room.snapshot());
-  if(name==='/api/room/context'&&req.method==='GET')return json(res,200,await room.context());
+  if(name==='/api/room/life'&&req.method==='GET')return json(res,200,await roomLife.snapshot());
+  if(name==='/api/room/life'&&req.method==='PUT')return json(res,200,await roomLife.update(await body(req)));
+  if(name==='/api/room/life/presence'&&req.method==='POST')return json(res,200,await roomLife.presence(await body(req)));
+  if(name==='/api/room/life/briefing'&&req.method==='GET'){const state=await room.snapshot(),life=await roomLife.snapshot();return json(res,200,{available:true,enabled:life.enabled,revision:state.revision,pause_reason:life.pause_reason,locks:state.locks,movable_items:(await room.context()).movable_items,wishes:life.wishes.filter(w=>['open','accepted'].includes(w.status)).map(w=>({item:w.item,text:w.text}))});}
+  if(name==='/api/room/context'&&req.method==='GET'){const context=await room.context();try{const life=await roomLife.snapshot();context.representation='大肥鱼住在自己的小屋里，会沿房间路线走动、坐在电脑前、到床上侧卧休息。'+(life.character?'当前宿主姿态：'+({walk:'正在走动',sit:'坐在电脑前',sleep:'在床上休息',idle:'在小屋里待着'}[life.character.pose])+'。':'当前人物位置暂未由画面报告，不猜测正在浏览或睡觉。')+' 最近的小打算：'+JSON.stringify(life.wishes.filter(w=>['open','accepted'].includes(w.status)).slice(0,2).map(w=>({item:w.item,text:w.text})));context.life=life;}catch{}return json(res,200,context);}
   if(name==='/api/room/contents'&&req.method==='GET')return json(res,200,await roomContents.snapshot());
   if(name==='/api/room/collection'&&req.method==='PUT')return json(res,200,await roomContents.collect(await body(req)));
   if(name==='/api/room/library'&&req.method==='GET')return json(res,200,await room.library(url.searchParams.get('scope')||'active',Number(url.searchParams.get('offset')||0)));

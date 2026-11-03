@@ -2,7 +2,7 @@ import {useEffect} from 'react'
 import {api} from '../api'
 import {ensureAtmosphere} from './atmosphere'
 import type {Layout} from './layout.mjs'
-export interface CaptureJob {id:string;lease:string;view:'room'|'window';revision:number;layout:Layout;environment:{period:string;weather:string;lamp:boolean}}
+export interface CaptureJob {character_intent?:string;id:string;lease:string;view:'room'|'window';revision:number;layout:Layout;environment:{period:string;weather:string;lamp:boolean}}
 export function useRoomRenderer(enabled:boolean){
   useEffect(()=>{
     if(!enabled)return;const abort=new AbortController(),worker=crypto.randomUUID();let timer:ReturnType<typeof setTimeout>|undefined

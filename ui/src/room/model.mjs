@@ -12,7 +12,7 @@ export const roomItems={
   window:{name:'海景窗和窗台',area:'房间后墙',details:'有窗帘，可以看到虚拟海景和所选雨雪氛围'},
   plant:{name:'盆栽',area:'书桌右前方',details:'白色花盆里的绿植；左墙高处的搁板还放着小盆栽'},
   picture:{name:'装饰画',area:'左墙',details:'木框海色小画，旁边有搁板'},
-  rug:{name:'鲸鱼地毯',area:'房间中央',details:'浅蓝色圆地毯，角色现在显示在这里'},
+  rug:{name:'鲸鱼地毯',area:'房间中央',details:'浅蓝色圆地毯，是她散步时会经过的地方'},
   cup:{name:'杯子'},book:{name:'小本子'},cushion:{name:'蓝色抱枕'},
 };
 export function validateAtmosphere(value){
@@ -22,7 +22,7 @@ export function validateAtmosphere(value){
 export function describeRoom(snapshot,now=new Date()){
   const preferences=snapshot.environment||{period:'auto',weather:'clear',lamp:true},env=roomEnvironment(preferences.period,preferences.weather,now);
   return {name:'大肥鱼的小屋',ownership:'这是大肥鱼在应用里的虚拟房间，和用户正在看的三维小屋是同一个场景。',
-    representation:'角色显示在房间中央的鲸鱼地毯上。这是虚拟空间的位置，不代表现实身体，也不据此推断用户所在位置或后台工作。',
+    representation:'角色在房间路线间活动，可坐在电脑前或到床上休息。这是虚拟空间的位置，不代表现实身体，也不据此推断用户所在位置或后台工作。',
     revision:snapshot.revision,observed_at:now.toISOString(),layout_state:'已保存的房间布置；未保存的拖动草稿不会覆盖这份状态。',
     environment:{period:env.period,weather:env.weather,lamp:preferences.lamp,source:snapshot.environment?'saved_scene':'default_scene',note:'时段、海景与雨雪是房间画面氛围，不是用户当地的真实天气。'},
     fixed_furnishings:Object.entries(roomItems).filter(([id])=>!Object.hasOwn(objects,id)).map(([id,item])=>({id,...item,movable:false})),

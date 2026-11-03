@@ -5,9 +5,9 @@ const uuid=value=>typeof value==='string'&&/^[a-f0-9-]{36}$/.test(value);
 
 // Only a live, authenticated application renderer can fulfil a request. No desktop
 // screenshot, camera, old gallery fallback, or model-generated picture is involved.
-export function createRoomCapture(room,{timeout=25_000,wait=15_000}={}){
+export function createRoomCapture(room,{timeout=25_000,wait=15_000,intent=async()=> 'idle'}={}){
   const jobs=new Map(),waiting=new Map();let closed=false;
-  const take=worker=>{for(const job of jobs.values())if(job.state==='queued'){job.state='rendering';job.worker=worker;return {id:job.id,lease:job.lease,view:job.view,layout:job.layout,environment:job.environment,revision:job.revision};}return null;};
+  const take=worker=>{for(const job of jobs.values())if(job.state==='queued'){job.state='rendering';job.worker=worker;return {id:job.id,lease:job.lease,view:job.view,layout:job.layout,environment:job.environment,revision:job.revision,character_intent:job.character_intent};}return null;};
   function dispatch(){for(const [worker,entry]of waiting){const job=take(worker);if(!job)break;entry.finish(job);}}
   function finish(job,error,result){if(['done','failed'].includes(job.state))return;clearTimeout(job.timer);job.state=error?'failed':'done';job.result=result;job.error=error;error?job.reject(error):job.resolve(result);}
   return {
@@ -23,7 +23,10 @@ export function createRoomCapture(room,{timeout=25_000,wait=15_000}={}){
       if(jobs.has(data.operation_id)){const existing=jobs.get(data.operation_id);if(existing.fingerprint!==fingerprint)throw fail('同一拍照请求的内容发生了变化。',409);return existing.promise;}
       if(closed||[...jobs.values()].filter(j=>!['done','failed'].includes(j.state)).length>=4||jobs.size>=128)throw fail('小屋拍照服务暂不可用，请稍后再试。',503);
       const settings=snapshot.environment||{period:'auto',weather:'clear',lamp:true},period=roomEnvironment(settings.period,settings.weather).period;
-      const job={id:data.operation_id,fingerprint,view:data.view,revision:data.revision,layout:snapshot.layout,environment:{period,weather:settings.weather,lamp:settings.lamp},state:'queued',started:Date.now(),lease:randomUUID()};
+      const character_intent=await intent();
+      if(jobs.has(data.operation_id)){const existing=jobs.get(data.operation_id);if(existing.fingerprint!==fingerprint)throw fail('同一拍照请求的内容发生了变化。',409);return existing.promise;}
+      if(closed)throw fail('小屋拍照服务正在重启。',503);
+      const job={character_intent,id:data.operation_id,fingerprint,view:data.view,revision:data.revision,layout:snapshot.layout,environment:{period,weather:settings.weather,lamp:settings.lamp},state:'queued',started:Date.now(),lease:randomUUID()};
       job.promise=new Promise((resolve,reject)=>{job.resolve=resolve;job.reject=reject;});jobs.set(job.id,job);
       job.timer=setTimeout(()=>finish(job,fail('小屋画面暂未响应，照片没有拍成；请打开应用后再试。',503)),timeout);dispatch();return job.promise;
     },

@@ -23,6 +23,8 @@ test('private data requires a local session cookie',async()=>{
   assert.equal((await fetch(BASE+'/api/room/context')).status,401);
   assert.equal((await fetch(BASE+'/api/room/contents')).status,401);
   assert.equal((await fetch(BASE+'/api/room/library')).status,401);
+  assert.equal((await fetch(BASE+'/api/room/life')).status,401);
+  assert.equal((await fetch(BASE+'/api/room/life/briefing')).status,401);
   assert.equal((await fetch(BASE+'/api/room/actions',{method:'POST',body:'{}'})).status,401);
   assert.equal((await fetch(BASE+'/api/room/photos/ph-'+'0'.repeat(24)+'/image')).status,401);
 });
@@ -39,6 +41,9 @@ test('room snapshots and photos inherit desktop authentication and mutation prot
   assert.equal((await fetch(BASE+'/api/room/actions',{method:'POST',headers:{...headers,Origin:'https://example.org'},body:'{}'})).status,403);
   const context=await(await fetch(BASE+'/api/room/context',{headers})).json();assert.equal(context.movable_items.length,3);assert.ok(context.fixed_furnishings.some(v=>v.id==='plant'));assert.ok(context.fixed_furnishings.some(v=>v.id==='shelf'));
   const library=await(await fetch(BASE+'/api/room/library',{headers})).json();assert.ok(Number.isInteger(library.revision));assert.ok(library.usage.max_bytes>0);
+  const life=await(await fetch(BASE+'/api/room/life',{headers})).json();assert.equal(typeof life.enabled,'boolean');assert.ok(Array.isArray(life.wishes));
+  assert.equal((await fetch(BASE+'/api/room/life',{method:'PUT',headers,body:JSON.stringify({action:'settings',revision:-1,enabled:false})})).status,409);
+  assert.equal((await fetch(BASE+'/api/room/life/presence',{method:'POST',headers:{...headers,Origin:'https://example.org'},body:'{}'})).status,403);
   assert.equal((await fetch(BASE+'/api/room/library',{method:'PUT',headers,body:JSON.stringify({action:'trash',id:'ph-'+'0'.repeat(24),revision:-1,operation_id:crypto.randomUUID()})})).status,409);
   assert.equal((await fetch(BASE+'/api/room/collection',{method:'PUT',headers:{...headers,Origin:'https://example.org'},body:'{}'})).status,403);
   assert.equal((await fetch(BASE+'/api/room/capture',{method:'POST',headers:roomHeaders,body:JSON.stringify({operation_id:crypto.randomUUID(),revision:-1,view:'room'})})).status,409);

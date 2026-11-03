@@ -3,13 +3,25 @@ import {createServer} from 'vite';import {fileURLToPath} from 'node:url';import 
 import {createRoomStore} from '../server/room.mjs';
 import {createRoomCapture} from '../server/room-capture.mjs';
 import {createRoomContents} from '../server/room-contents.mjs';
+import {createRoomLife} from '../server/room-life.mjs';
+import {createHash} from 'node:crypto';
 const ui=fileURLToPath(new URL('..',import.meta.url)),root=await mkdtemp(path.join(os.tmpdir(),'fish-room-browser-')),room=createRoomStore(root);
 const capture=createRoomCapture(room);
+const life=createRoomLife(root,{room});
 const memory={id:'ep-'+'1'.repeat(24),summary:'虚构验收：一起看过纸机关，想试试让它自己弹开。',recorded_at:'2026-11-03T01:00:00Z',revision:1,effective_status:'active',kind:'event',source_ref:'fixture:fiction',excerpt:'虚构验收原话：这个纸机关怎样弹开？'};
 for(const folder of ['reports/2026-11-03','data/personality'])await mkdir(path.join(root,folder),{recursive:true});
 await writeFile(path.join(root,'reports/2026-11-03/0900-surf.md'),'# 虚构阅读验收\nhttps://example.org/fiction-paper');
 await writeFile(path.join(root,'data/surf-state.json'),JSON.stringify({visited:[{url:'https://example.org/fiction-paper',title:'虚构验收：会弹开的纸机关',report:'reports/2026-11-03/0900-surf.md'}]}));
 await writeFile(path.join(root,'data/personality/observations.jsonl'),JSON.stringify({id:'fixture-observation',url:'https://example.org/fiction-paper',report_path:'reports/2026-11-03/0900-surf.md',seen_at:'2026-11-03T01:00:00Z',read_depth:'body',observation:'虚构验收摘要：纸片的折痕储存了弹开的力。'}));
+const run='browse-'+'1'.repeat(16),eventId='rl-'+createHash('sha256').update(run).digest('hex').slice(0,24),report='reports/2026-11-03/0900-surf.md';
+for(const dir of ['data/curiosity','data/surf-completions','data/room-events'])await mkdir(path.join(root,dir),{recursive:true});
+await writeFile(path.join(root,'data/curiosity/state.json'),JSON.stringify({runs:[{id:run,status:'finished',report_path:report}]}));
+await writeFile(path.join(root,'data/surf-completions',run+'.json'),JSON.stringify({status:'committed',result:{report_path:report,observation_ids:['fixture-observation']}}));
+await writeFile(path.join(root,'data/room-events',eventId+'.json'),JSON.stringify({schema:1,id:eventId,run_id:run,created_at:new Date().toISOString(),report_path:report,observation_ids:['fixture-observation'],proposal:{action:'wish',item:'虚构验收：鲸鱼书签',text:'爹，那个纸机关让我想给小本子夹个鲸鱼书签。',why:'读到了纸片折痕的机关，想留一个翻页记号。'}}));
+const fs=await import('node:fs/promises'),sourceRow=JSON.parse(await fs.readFile(path.join(root,'data/personality/observations.jsonl'),'utf8')),sourceEvent=JSON.parse(await fs.readFile(path.join(root,'data/room-events',eventId+'.json'),'utf8'));sourceEvent.observation_hashes={[sourceRow.id]:createHash('sha256').update(['id','url','report_path','seen_at','read_depth','observation','candidate_trait','reason'].map(k=>sourceRow[k]||'').join('\0')).digest('hex')};await fs.writeFile(path.join(root,'data/room-events',eventId+'.json'),JSON.stringify(sourceEvent));
+const originalEvent=await (await import('node:fs/promises')).readFile(path.join(root,'data/room-events',eventId+'.json'));
+await writeFile(path.join(root,'data/surf-completions',run+'.json'),JSON.stringify({status:'committed',result:{report_path:report,observation_ids:['fixture-observation']},writes:[{path:'data/room-events/'+eventId+'.json',sha256:createHash('sha256').update(originalEvent).digest('hex')}]}));
+await life.tick();
 const contents=createRoomContents(root,{readMemories:async()=>({items:[memory]})});
 const html='<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>小屋交互回归 · 虚构状态</title><div id="root"></div><script type="module" src="/tests/room-fixture.tsx"></script></html>';
 const server=await createServer({configFile:false,root:ui,esbuild:{jsx:'automatic'},plugins:[{name:'room-fixture',configureServer(server){server.middlewares.use(async(req,res,next)=>{try{
@@ -18,6 +30,8 @@ const server=await createServer({configFile:false,root:ui,esbuild:{jsx:'automati
     let body='';if(['PUT','POST'].includes(req.method)){for await(const chunk of req){body+=chunk;if(Buffer.byteLength(body)>3*1024*1024)throw Error('夹具请求过大');}}
     if(req.url==='/api/companion')return json(200,{state:'idle',label:'在小屋里待着呢'});
     if(req.url==='/api/room')return json(200,req.method==='PUT'?await room.update(JSON.parse(body)):await room.snapshot());
+    if(req.url==='/api/room/life')return json(200,req.method==='PUT'?await life.update(JSON.parse(body)):await life.snapshot());
+    if(req.url==='/api/room/life/presence')return json(200,await life.presence(JSON.parse(body)));
     if(req.url==='/api/room/context')return json(200,await room.context());
     if(req.url==='/api/room/contents')return json(200,await contents.snapshot());
     if(req.url==='/api/room/collection'&&req.method==='PUT')return json(200,await contents.collect(JSON.parse(body)));

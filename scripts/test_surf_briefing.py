@@ -54,7 +54,7 @@ class BriefingTest(unittest.TestCase):
         self.assertFalse(curiosity.state(self.root)['runs'])
     def test_real_cli_emits_one_json_object_from_another_working_directory(self):
         scripts=self.root/'scripts';scripts.mkdir()
-        for name in ['curiosity.py','surf_briefing.py','fish_journal.py','fish_conversation.py','fish_interest.py','personality.py','surf_lifecycle.py']:
+        for name in ['curiosity.py','surf_briefing.py','fish_journal.py','fish_conversation.py','fish_interest.py','personality.py','surf_lifecycle.py','room_life.py']:
             shutil.copy2(Path(__file__).with_name(name),scripts/name)
         result=subprocess.run(['python3',str(scripts/'curiosity.py'),'briefing'],cwd=self.root.parent,capture_output=True,text=True)
         self.assertEqual(result.returncode,0,result.stderr);value=json.loads(result.stdout)

@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "source": "Generated with the built-in image_gen tool, using the attributed DSH character as identity reference. See ATTRIBUTION.md.",
+  "assets": {
+    "walk-atlas.png": {
+      "width": 2048,
+      "height": 768,
+      "sha256": "82908ff885c6f1e8fc0120f68b19f217e59eca42718ddfce690d85bfda9d5b5f",
+      "frames": 4
+    },
+    "sitting.png": {
+      "width": 1254,
+      "height": 1254,
+      "sha256": "887d0050c447faba842eec645f483b664a0c43408ed3b27752d500797082a342",
+      "frames": 1
+    },
+    "sleeping.png": {
+      "width": 1536,
+      "height": 1024,
+      "sha256": "47215aa8227a784140a46efd6f09c6ebfef62235eaa6701d7000258ece70bca1",
+      "frames": 1
+    }
+  }
+}

@@ -26,6 +26,8 @@ def briefing(root,now=None):
     if not status['can_go']:
         result.update({key:status[key]for key in ('can_go','rest_reason','used_today','daily_limit')});return redact(root,result)
     result.update(status);result['time_scope']='checked_at 只是准备时刻；出发时间以 begin 为准，页面 read_at 必须在实际阅读时采集，不估算或复用准备时间。'
+    from room_life import briefing as room_briefing
+    result['room']=room_briefing(root)
     result['documents']=[];used=0
     for name in DOCUMENTS:
         path=root/name

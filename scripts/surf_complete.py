@@ -35,7 +35,7 @@ def read_bytes(root,name):
 
 
 def write_bytes(path,value):
-    path.parent.mkdir(parents=True,exist_ok=True)
+    path.parent.mkdir(parents=True,exist_ok=True,mode=0o700)
     with tempfile.NamedTemporaryFile('wb',dir=path.parent,delete=False) as stream:
         stream.write(value);stream.flush();__import__('os').fsync(stream.fileno());tmp=Path(stream.name)
     tmp.chmod(0o600);tmp.replace(path)
@@ -171,9 +171,17 @@ def complete(root,data,now=None):
                     outbox='data/outbox/'+ident+'.json'
                     if read_bytes(root,outbox) is not None:raise ValueError('本轮来信候选已存在，未覆盖。')
                     curiosity.atomic(staged/outbox,letter)
+            from room_life import proposal as room_proposal
+            room_event=room_proposal(root,data.get('room'),ident,name,added,now)
+            room_event_path=None
+            if room_event:
+                room_event_path='data/room-events/'+room_event['id']+'.json'
+                if read_bytes(root,room_event_path) is not None:raise ValueError('本轮小屋想法已存在，不覆盖。')
+                curiosity.atomic(staged/room_event_path,room_event)
             result={'ok':True,'run_id':ident,'outcome':finished['outcome'],'report_path':name,'observation_ids':[a['id']for a in added],
                 'thread_ids':[t['id']for t in remembered],'skipped_threads':len(proposed)-len(allowed),'preference_id':trial['id'] if trial else None,'share_queued':bool(outbox)}
-            order=[name,*MUTABLE]+([outbox]if outbox else [])
+            if room_event_path:result['room_event_queued']=True
+            order=[name,*MUTABLE]+([outbox]if outbox else [])+([room_event_path]if room_event_path else [])
             writes=[{'path':n,'before':digest(before.get(n)),'content':(staged/n).read_text()}for n in order if (staged/n).exists() and (staged/n).read_bytes()!=before.get(n)]
             receipt={'version':1,'status':'prepared','payload_hash':token,'writes':writes,'reads':[{'path':n,'before':digest(before[n])}for n in READ_ONLY], 'result':result}
             write_bytes(path,json.dumps(receipt,ensure_ascii=False,indent=2).encode())

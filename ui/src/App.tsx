@@ -9,6 +9,7 @@ const MattersPanel = lazy(() => import('./MattersPanel'))
 import ModelSettings from './ModelSettings'
 import {readPhotoDraft,type RoomPhoto} from './room/types'
 import {useRoomRenderer} from './room/useRoomRenderer'
+import {useRoomPresence} from './room/presence'
 import { Component, lazy, Suspense, memo, useCallback, useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import { ArrowDown, ArrowRight, ArrowUp, BookOpen, Brain, Check, CheckCheck, ChevronDown, ChevronLeft, ChevronRight, Clock3, Compass, Copy, ExternalLink, FileText, Globe2, Heart, House, Mail, Smile, Menu, MessageCircle, MoreHorizontal, Pause, Pencil, Play, Plus, RefreshCw, Search, Send, Settings2, Sparkles, Square, Waves, X, Zap } from 'lucide-react'
 import ReactMarkdown, { type Components } from 'react-markdown'
@@ -64,6 +65,7 @@ class RoomBoundary extends Component<{children: ReactNode; onClose:()=>void}, {f
   render() { return this.state.failed ? <div role="alert" className="learning-error"><p>小屋画面暂时没有打开，聊天和记忆仍然保留。</p><button className="secondary-button" onClick={this.props.onClose}>回到聊天</button></div> : this.props.children }
 }
 export default function App() {
+  useRoomPresence()
   const [bootEditor] = useState(readEditorDraft), editorVersion = useRef(bootEditor?.version || '')
   const [memoryView,setMemoryView]=useState<'overview'|'stars'>('overview')
   const [page, setPage] = useState<Page>(() => { const saved = localStorage.getItem('fish.page'); return pages.some(p => p.id === saved) ? saved as Page : 'chat' }), [overview, setOverview] = useState<Overview | null>(null), [sessions, setSessions] = useState<Session[]>([])

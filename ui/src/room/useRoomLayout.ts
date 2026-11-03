@@ -21,7 +21,7 @@ export function useRoomLayout(watch=true){
     const timer=setInterval(()=>void refresh(),10_000);window.addEventListener('fish:window-visibility',refresh);document.addEventListener('visibilitychange',refresh)
     return()=>{controller.abort();clearInterval(timer);window.removeEventListener('fish:window-visibility',refresh);document.removeEventListener('visibilitychange',refresh)}
   },[watch])
-  useEffect(()=>{if(!saved)return;try{if(dirty)localStorage.setItem(key,JSON.stringify({revision:base,layout:draft}));else localStorage.removeItem(key)}catch{}},[draft,base,saved,dirty])
+  useEffect(()=>{if(!saved)return;try{if(dirty)localStorage.setItem(key,JSON.stringify({revision:base,layout:draft}));else localStorage.removeItem(key)}catch{};window.dispatchEvent(new Event('fish.room.draft'))},[draft,base,saved,dirty])
   async function update(action:'save'|'undo'|'reset'|'lock',extra?:{object:string;locked:boolean}){
     if(!saved||busy)return;setBusy(true);setError('')
     try{const value=await api<RoomSnapshot>('/room',{method:'PUT',body:JSON.stringify({action,revision:base,operation_id:crypto.randomUUID(),...(action==='save'?{layout:draft}:{}),...extra})});if(mounted.current)accept(value)}catch(e){if(mounted.current)setError((e as Error).message)}finally{if(mounted.current)setBusy(false)}
