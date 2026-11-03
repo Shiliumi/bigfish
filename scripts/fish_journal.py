@@ -586,6 +586,9 @@ def main():
                 data = json.load(sys.stdin)
                 if data.get('action') == 'update':
                     result = journal.update(data.get('id'), data.get('revision'), data.get('summary'), data.get('pinned'), data.get('forget', False), data.get('valid_until', UNSET), data.get('kind'), data.get('invalidate', False),aliases=data.get('aliases',UNSET))
+                elif data.get('action') == 'graph':
+                    from fish_memory_graph import graph
+                    result = graph(journal, data)
                 elif data.get('action') == 'detail':
                     row = journal.get(data.get('id'))
                     result = {**journal.describe(row), 'history': journal.history(row['id'])} if row and row['status'] == 'active' else None

@@ -103,11 +103,22 @@ test('model configuration exposes only a presence flag and rejects cross-origin 
 });
 
 test('usage and episodic memory inherit native-only authentication and validate lookups',async()=>{
- for(const route of ['/api/usage','/api/episodes'])assert.equal((await fetch(BASE+route)).status,401);
+ for(const route of ['/api/usage','/api/episodes','/api/memory-graph'])assert.equal((await fetch(BASE+route)).status,401);
  const usage=await fetch(BASE+'/api/usage?days=7',{headers});assert.equal(usage.status,200);const value=await usage.json();assert.equal(value.days,7);assert.ok(Array.isArray(value.sources));assert.equal(typeof value.settings.paused,'boolean');
  const episodes=await fetch(BASE+'/api/episodes',{headers});assert.equal(episodes.status,200);const memory=await episodes.json();assert.ok(Array.isArray(memory.items));assert.ok(memory.items.every(item=>!Object.hasOwn(item,'excerpt')));
  assert.equal((await fetch(BASE+'/api/episodes/ep-000000000000000000000000',{headers})).status,404);
  assert.equal((await fetch(BASE+'/api/usage?days=0',{headers})).status,400);
+});
+
+test('memory star map is authenticated, read only and exposes source-free projected records',async()=>{
+ const response=await fetch(BASE+'/api/memory-graph',{headers});assert.equal(response.status,200);const graph=await response.json();
+ assert.ok(Array.isArray(graph.nodes));assert.ok(Array.isArray(graph.edges));assert.ok(graph.nodes.length<=500);
+ assert.ok(graph.nodes.every(n=>n.effective_status==='active'&&!('session_id'in n)&&!('excerpt'in n)&&!('history'in n)&&!('source_ref'in n)));
+ assert.ok(graph.edges.every(e=>graph.nodes.some(n=>n.id===e.source)&&graph.nodes.some(n=>n.id===e.target)&&e.reasons.every(r=>['alias','conversation'].includes(r.kind))));
+ assert.equal((await fetch(BASE+'/api/memory-graph?scope=invalid',{headers})).status,409);
+ assert.equal((await fetch(BASE+'/api/memory-graph?pinned=1',{headers})).status,400);
+ assert.equal((await fetch(BASE+'/api/memory-graph',{headers:{...headers,Origin:'https://example.org'}})).status,403);
+ assert.equal((await fetch(BASE+'/api/memory-graph',{method:'POST',headers,body:'{}'})).status,404);
 });
 
 test('personality and temporal views are native-only and validate scope and revisions',async()=>{

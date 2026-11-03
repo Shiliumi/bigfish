@@ -134,6 +134,11 @@ async function handleAPI(req,res,url) {
   if(name==='/api/budget' && req.method==='GET') return json(res,200,await learningScript(ROOT,'fish_budget.py',{action:'snapshot'}));
   if(name==='/api/budget' && req.method==='PUT') {const data=await body(req);return json(res,200,await learningScript(ROOT,'fish_budget.py',{action:'settings',enabled:data.enabled,daily_tokens:data.daily_tokens,revision:data.revision}));}
   if(name==='/api/automation/settings' && req.method==='PUT') return json(res,200,await usage.saveSettings(await body(req)));
+  if(name==='/api/memory-graph' && req.method==='GET') {
+    const p=url.searchParams;
+    if(p.has('pinned')&&!['true','false'].includes(p.get('pinned')))fail('固定筛选无效。');
+    return json(res,200,await journal(ROOT,{action:'graph',q:p.get('q')||'',scope:p.get('scope')||'current',kind:p.get('kind')||'all',pinned:p.get('pinned')==='true',from:p.get('from')||'',to:p.get('to')||''}));
+  }
   if(name==='/api/episodes' && req.method==='GET') return json(res,200,await journal(ROOT,{q:(url.searchParams.get('q')||'').slice(0,200),scope:url.searchParams.get('scope')||'current',limit:30}));
   if(name==='/api/matters' && req.method==='GET') return json(res,200,await learningScript(ROOT,'fish_matters.py',{action:'list',query:(url.searchParams.get('q')||'').slice(0,200)}));
   if(name==='/api/matters' && req.method==='POST') {const data=await body(req);return json(res,200,await learningScript(ROOT,'fish_matters.py',{action:'remember',title:data.title,kind:data.kind}));}
