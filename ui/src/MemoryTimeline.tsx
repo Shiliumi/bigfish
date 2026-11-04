@@ -15,7 +15,7 @@ export default function MemoryTimeline(){
  {error&&<p role="alert" className="learning-error">{error}</p>}
  <div className="episode-grid">{items.map(item=><button className="episode-card" key={item.id} onClick={()=>setSelected(item.id)}><span><BookOpen size={15}/>{new Date(item.recorded_at).toLocaleDateString('zh-CN')}{Boolean(item.pinned)&&<Pin size={13}/>}<em>{item.effective_status==='expired'?'已过时':item.effective_status==='future'?'尚未生效':item.kind==='impression'?'情境印象':'具体经历'}{item.corrected_at?' · 已更正':''}</em></span><p>{item.summary}</p><small>{item.valid_until?'有效至 '+date(item.valid_until):'保留经历，按相关性想起'}{item.match_kind?' · '+({alias:'别名关联',equivalent:'相关词关联',keywords:'关键词匹配'}[item.match_kind]||'相关线索'):''} · 查看来源</small></button>)}</div>
  {!loading&&!items.length&&<div className="learning-empty"><BookOpen size={25}/><p>{query?'这次没翻到，换个具体话题试试。':'还没有符合条件的片段。新对话的经历会慢慢积攒在这里。'}</p></div>}
- <p className="learning-footnote">默认展示近期与已固定的 30 段；搜索支持少量常见同义词、手动别名，以及昨天、前天、上周和明确日期。日期按原聊天记录的北京时间筛选。过时记录只在历史中查看，不进入当前召回；固定也不延长有效期。遗忘会清除此回忆及修改历史，原始 Hermes 聊天仍保留。</p>
+ <details className="compact-disclosure"><summary>了解这些记录</summary><p className="learning-footnote">默认展示近期与已固定的 30 段；搜索支持少量常见同义词、手动别名，以及昨天、前天、上周和明确日期。日期按原聊天记录的北京时间筛选。过时记录只在历史中查看，不进入当前召回；固定也不延长有效期。遗忘会清除此回忆及修改历史，原始 Hermes 聊天仍保留。</p></details>
  {selected&&<MemoryEpisodeEditor id={selected} onClose={()=>setSelected(null)} onChanged={()=>void load()}/>}
  </section>
 }

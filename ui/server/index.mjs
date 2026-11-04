@@ -104,12 +104,11 @@ async function reports() {
   await walk(root);return files.sort((a,b)=>b.modified.localeCompare(a.modified));
 }
 async function overview() {
-  const results=await Promise.allSettled([native('/api/status?profile=default'),native('/api/cron/jobs?profile=default'),reports(),textFile(path.join(ROOT,'data/surf-state.json')),textFile(documents.memory)]);
+  const results=await Promise.allSettled([native('/api/status?profile=default'),native('/api/cron/jobs?profile=default'),reports()]);
   const value=(i,fallback)=>results[i].status==='fulfilled'?results[i].value:fallback;
   const status=value(0,{}), jobs=value(1,[]), records=value(2,[]);
-  let visited=[];try{visited=JSON.parse(value(3,'{}')).visited||[];}catch{}
   const {model}=await models.snapshot();
-  return {connected:results[0].status==='fulfilled' && Boolean(status.gateway_running),model,jobs:Array.isArray(jobs)?jobs:jobs.jobs||[],reports:records,visited,memories:value(4,'').split(/\n?§\n?/).filter(s=>s.trim()).length,service:status.gateway_state||null};
+  return {connected:results[0].status==='fulfilled' && Boolean(status.gateway_running),model,jobs:Array.isArray(jobs)?jobs:jobs.jobs||[],reports:records,service:status.gateway_state||null};
 }
 async function handleAPI(req,res,url) {
   authorize(req);const name=url.pathname;

@@ -1,9 +1,9 @@
 import {useEffect, useState} from 'react'
-import {AlertCircle, CheckCircle2, RefreshCw, Settings2, Sparkles} from 'lucide-react'
+import {AlertCircle, CheckCircle2, RefreshCw, Sparkles} from 'lucide-react'
 import {api} from './api'
 import './settings.css'
 export interface ModelConfig {provider:string;base_url:string;model:string;name:string;has_key:boolean;api_mode:string;version:string}
-export default function ModelSettings({busy,onSaved,onEdit}:{busy:boolean;onSaved:(config:ModelConfig)=>Promise<void>;onEdit:(key:string)=>void}) {
+export default function ModelSettings({busy,onSaved}:{busy:boolean;onSaved:(config:ModelConfig)=>Promise<void>}) {
   const [config,setConfig]=useState<ModelConfig|null>(null),[base,setBase]=useState(''),[model,setModel]=useState(''),[key,setKey]=useState(''),[clearKey,setClearKey]=useState(false)
   const [models,setModels]=useState<string[]>([]),[pending,setPending]=useState('loading'),[error,setError]=useState(''),[result,setResult]=useState<{message:string;latency_ms:number}|null>(null),[notice,setNotice]=useState('')
   async function load(){setPending('loading');setError('');try{const value=await api<ModelConfig>('/model-settings');setConfig(value);setBase(value.base_url);setModel(value.model);setKey('');setClearKey(false)}catch(e){setError((e as Error).message)}finally{setPending('')}}
@@ -37,6 +37,6 @@ export default function ModelSettings({busy,onSaved,onEdit}:{busy:boolean;onSave
       <div className="model-feedback" aria-live="polite">{error&&<p className="model-error" role="alert"><AlertCircle size={17}/><span>{error}</span></p>}{result&&<p className="model-success"><CheckCircle2 size={17}/><span>{result.message}<small>耗时 {(result.latency_ms/1000).toFixed(2)} 秒</small></span></p>}{notice&&<p className="model-notice">{notice}</p>}</div>
       <div className="model-setting-actions"><p>保存会开启新对话，旧聊天仍在「最近聊过」。<br/>测试会发一条简短请求，消耗少量 token。</p><div><button className="secondary-button" disabled={disabled||!base.trim()||!model.trim()} onClick={()=>void run('test')}>{pending==='test'&&<RefreshCw size={14} className="spin"/>}测试连通性</button><button className="primary-button" disabled={disabled||busy||!base.trim()||!model.trim()} onClick={()=>void run('save')}>{pending==='save'&&<RefreshCw size={14} className="spin"/>}{pending==='save'?'保存中…':'保存并开启新对话'}</button></div>{busy&&<small>她正在回复，结束后可以保存切换。</small>}</div>
     </>:<div className="model-feedback"><p className="model-error" role="alert">{error}</p><button className="secondary-button" onClick={()=>void load()}>重新读取</button></div>}
-    <div className="settings-more"><h4>相处的小偏好</h4><button disabled={disabled} onClick={()=>onEdit('interests')}><Settings2 size={17}/><span>兴趣与探索偏好</span><span>›</span></button><button disabled={disabled} onClick={()=>onEdit('soul')}><Sparkles size={17}/><span>她的人格与说话方式</span><span>›</span></button></div>
+
   </div>
 }

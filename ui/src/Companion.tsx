@@ -47,7 +47,7 @@ export function Companion() {
     let alive = true
     void loadAssets().then(value => { if (alive) setManifest(value) }).catch(() => { if (alive) setCaption('动画没能载入，刷新后再看看。') })
     const load = () => api<State>('/companion').then(value => { if (alive) setState(value) }).catch(() => { if (alive) setState({ animation: 'idle', state: 'offline', label: '鱼塘暂时离线', unread: 0 }) })
-    void load(); const timer = setInterval(() => { if (!document.hidden) void load() }, 3000)
+    void load(); const timer = setInterval(() => { if (!document.hidden&&(window as any).__FISH_WINDOW_VISIBLE__!==false) void load() }, 5000)
     const dismiss = (e: PointerEvent) => { if (!container.current?.contains(e.target as Node)) setOpen(false) }
     const key = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false) }
     document.addEventListener('pointerdown', dismiss); window.addEventListener('keydown', key)

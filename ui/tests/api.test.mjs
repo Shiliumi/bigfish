@@ -84,7 +84,7 @@ test('stale memory edits are rejected without overwriting current contents',asyn
 });
 test('overview contains the actual existing reports and native routines',async()=>{
   const response=await fetch(BASE+'/api/overview',{headers});assert.equal(response.status,200);const data=await response.json();
-  assert.ok(data.connected);assert.ok(data.jobs.some(j=>j.name==='fish-surf'));assert.ok(data.jobs.some(j=>j.name==='fish-memory'));assert.ok(data.reports.every(r=>typeof r.content==='string'));
+  assert.ok(data.connected);assert.ok(data.jobs.some(j=>j.name==='fish-surf'));assert.ok(data.jobs.some(j=>j.name==='fish-memory'));assert.ok(data.reports.every(r=>typeof r.content==='string'));assert.ok(!('visited' in data));assert.ok(!('memories' in data));
 });
 
 test('browser chat tickets are authenticated, temporary, and single use',async()=>{

@@ -1,5 +1,5 @@
 import { memo, useEffect, useRef, useState } from 'react'
-import { ArrowUpRight, CloudRain, Lamp, Lock, Unlock, Moon, RotateCcw, SlidersHorizontal, Plus, Minus, Camera, Move, Save, Undo2, RotateCw, Snowflake, Sun, Sunset, X } from 'lucide-react'
+import { ChevronDown, ArrowUpRight, CloudRain, Lamp, Lock, Unlock, Moon, RotateCcw, SlidersHorizontal, Plus, Minus, Camera, Move, Save, Undo2, RotateCw, Snowflake, Sun, Sunset, X } from 'lucide-react'
 import { api } from '../api'
 import {roomIntent} from './life-motion.mjs'
 import RoomLife from './RoomLife'
@@ -13,8 +13,6 @@ import RoomContents from './RoomContents'
 import RoomAlbum from './RoomAlbum'
 import './room.css'
 
-interface Clip {label:string;duration:number;poster:string;preview:string;mov:string;webm:string;width:number;height:number;fps:number}
-interface Manifest {version:number;animations:Record<string,Clip>}
 type Destination='chat'|'explore'|'memory'|'inbox'
 const slots:Record<string,{title:string;description:string;destination?:Destination;link?:string}> = {
   window:{title:'窗边',description:'窗外是小屋的海景。这里的雨雪是房间氛围，可以按你喜欢的样子切换。'},
@@ -92,7 +90,7 @@ function RoomPage({onNavigate,onAttachPhoto,onOpenStarMap}:{onOpenStarMap?:()=>v
     <div className="room-actions"><button className={'room-button '+(editing?'selected':'')} aria-pressed={editing} onClick={()=>setEditing(v=>!v)} disabled={!room.saved||room.busy||taking}><Move size={16}/>{editing?'结束布置':'布置小屋'}</button>{(editing||room.dirty)&&<><button className="room-button" disabled={!room.dirty||room.busy||taking} onClick={()=>void room.update('save')}><Save size={15}/>{room.busy?'正在保存…':'保存布置'}</button><button className="room-button" disabled={!room.saved?.can_undo||room.dirty||room.busy||taking} onClick={()=>void room.update('undo')}><Undo2 size={15}/>撤销上次保存</button><button className="room-text-link" disabled={room.busy} onClick={()=>void room.reload()}>读取已保存布置</button><button className="room-text-link" disabled={room.busy||taking} onClick={()=>void room.update('reset')}>恢复默认</button></>}<div className="room-photo-actions"><button className="room-button" disabled={!room.saved||room.dirty||taking||room.busy||failed||contextLost||!atmosphere.ready} onClick={()=>void capture('room')}><Camera size={16}/>{taking?'拍照中…':'拍张全景'}</button><button className="room-button" disabled={!room.saved||room.dirty||taking||room.busy||failed||contextLost||!atmosphere.ready} onClick={()=>void capture('window')}>拍窗边</button></div></div>
     {(room.error||atmosphere.error||notice||room.dirty)&&<div className="room-notice" role={room.error?'alert':'status'}>{room.error||atmosphere.error||notice||'布置还没有保存，草稿会留在本机。保存后就可以拍照。'}{room.error&&<button onClick={()=>void room.reload()} disabled={room.busy}>重新读取</button>}</div>}
     {editing&&<div className="room-edit-palette" role="group" aria-label="选择要布置的物品">{(Object.keys(objects) as ObjectId[]).map(id=><button key={id} aria-pressed={selected===id} onClick={()=>setSelected(id)}>{objects[id].label}</button>)}<span>可以拖动物品，或点物品选择放置位置。</span></div>}
-    <div className="room-life-controls" role="group" aria-label="小屋人物活动">{[{id:'auto',text:'随她活动'},{id:'walk',text:'屋里走走'},{id:'desk',text:'去电脑前'},{id:'sleep',text:'去床上歇会儿'}].map(item=><button className={'room-button '+(mode===item.id?'selected':'')} key={item.id} aria-pressed={mode===item.id} onClick={()=>setMode(item.id)}>{item.text}</button>)}<span>{mode==='auto'?'真实工作时去桌前，凌晨空闲时休息；其余时候在屋里走走。':'手选会保留，点“随她活动”恢复自动；不启动或停止后台任务。'}</span></div>
+    <div className="room-life-controls"><span>{mode==='auto'?'随她活动':mode==='walk'?'想在屋里走走':mode==='desk'?'待在电脑前':'去床上歇会儿'}</span><details className="room-interaction"><summary className="room-button">互动<ChevronDown size={15}/></summary><div className="room-interaction-menu" role="group" aria-label="小屋人物活动">{[{id:'auto',text:'随她活动'},{id:'walk',text:'屋里走走'},{id:'desk',text:'去电脑前'},{id:'sleep',text:'去床上歇会儿'}].map(item=><button className={'room-button '+(mode===item.id?'selected':'')} key={item.id} aria-pressed={mode===item.id} onClick={event=>{setMode(item.id);event.currentTarget.closest('details')?.removeAttribute('open')}}>{item.text}</button>)}<small>手选会保留，选“随她活动”恢复自动。</small></div></details></div>
     <div className="room-card">
       <div className="room-scene-label"><span className="room-dot"/>{sceneEnvironment.label}<span className="room-scene-number">海边小屋</span></div>
       <div className="room-stage" ref={host} data-period={sceneEnvironment.period} data-pose={resident.pose} data-goal={resident.goal}>

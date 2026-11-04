@@ -78,7 +78,7 @@ final class FishDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKN
         let main = NSMenu(), appItem = NSMenuItem(), appMenu = NSMenu()
         appMenu.addItem(withTitle: "关于大肥鱼", action: #selector(about), keyEquivalent: "")
         appMenu.addItem(withTitle: "打开鱼塘", action: #selector(showFromMenu), keyEquivalent: "0")
-        appMenu.addItem(withTitle: "Hermes 面板", action: #selector(showHermes), keyEquivalent: "2")
+        appMenu.addItem(withTitle: "高级管理…", action: #selector(showHermes), keyEquivalent: "2")
         appMenu.addItem(withTitle: "设置…", action: #selector(showSettings), keyEquivalent: ",")
         appMenu.addItem(withTitle: "鱼的来信", action: #selector(showInbox), keyEquivalent: "i")
         appMenu.addItem(withTitle: "显示 / 收起小鲸鱼", action: #selector(togglePet), keyEquivalent: "p")
