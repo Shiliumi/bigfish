@@ -59,4 +59,11 @@ class RoomToolTest(unittest.TestCase):
             self.assertFalse(self.client.live({'action':'photo','quote':'把你房间的照片发我看看'},'不要把你房间的照片发我看看','chat','time')['ok']);call.assert_not_called()
 
 
+
+    def test_weather_question_omits_unneeded_inventory_but_preserves_current_state(self):
+        value={'name':'虚构小屋','representation':{'pose':'sleep'},'environment':{'weather':'snow'},'scope':'可移动清单不是全部家具','fixed_furnishings':[{'name':'书架','area':'左边','details':'三层'}],'movable_items':[{'name':'杯子','at':'书桌','locked':True}]}
+        with patch.object(self.client,'_request',return_value=value):
+            weather=self.client.context('窗外下雪了吗');self.assertIn('snow',weather);self.assertIn('sleep',weather);self.assertNotIn('furnishings',weather)
+            inventory=self.client.context('窗外下雪，屋里有书架吗');self.assertIn('书架',inventory);self.assertIn('locked',inventory)
+
 if __name__=='__main__':unittest.main()

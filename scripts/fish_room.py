@@ -40,6 +40,8 @@ class RoomClient:
             compact={key:value[key]for key in ('name','representation','environment','scope')}
             compact['furnishings']=[{key:row[key]for key in ('name','area','details')}for row in value['fixed_furnishings']]
             compact['movable_items']=[{key:row[key]for key in ('name','at','locked')}for row in value['movable_items']]
+            if re.search(r'天气|下雨|下雪|雨天|雪天|白天|晚上|窗外',query)and not re.search(r'家具|布置|挪|移动|摆|放到|花盆|盆栽|书架|床|抱枕|杯子|本子',query):
+                compact.pop('furnishings',None);compact.pop('movable_items',None)
             return '当前虚拟小屋的宿主状态（同一应用画面；当前状态优先于旧回答、旧回忆里的猜测）：\n'+json.dumps(compact,ensure_ascii=False,separators=(',',':'))
         except (OSError,URLError,ValueError,KeyError,TypeError):return '当前小屋状态暂时无法读取；你仍拥有应用内的小屋，不要把读取失败说成没有房间或没有固定家具。'
 

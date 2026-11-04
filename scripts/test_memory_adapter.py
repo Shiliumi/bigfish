@@ -19,6 +19,8 @@ class AdapterTest(unittest.TestCase):
         shutil.copy2(source/'scripts/fish_conversation.py',plugin/'conversation.py')
         shutil.copy2(source/'scripts/fish_matters.py',plugin/'matters.py')
         shutil.copy2(source/'scripts/fish_room.py',plugin/'room.py')
+        shutil.copy2(source/'scripts/fish_context.py',plugin/'context.py')
+        key=self.root/'data/context/transport.key';key.parent.mkdir(parents=True);key.write_text('a'*64)
         semantic=plugin/'semantic';semantic.mkdir();(semantic/'__init__.py').write_text('')
         for name in ('fish_journal.py','fish_semantic_cache.py','fish_embeddings.py','fish_embedding_process.py','fish_embedding_worker.py','fish_semantic_recall.py'):
             shutil.copy2(source/'scripts'/name,semantic/name)
@@ -173,7 +175,7 @@ class AdapterTest(unittest.TestCase):
         self.assertIn(text,self.provider.prefetch('随便说一句。'))
         with Journal(self.root)as journal:journal.update(row['id'],1,forget=True)
         packet=self.provider.prefetch('随便说一句。')
-        self.assertNotIn(text,packet);self.assertIn('"stage": "reconsidering"',packet);self.assertIn('先暂停',packet)
+        self.assertNotIn(text,packet);self.assertIn('"stage":"reconsidering"',packet);self.assertIn('先暂停',packet)
 
     def test_playful_personal_and_callback_share_mode_before_trial_selection(self):
         from datetime import datetime,timezone,timedelta
@@ -336,5 +338,27 @@ class AdapterTest(unittest.TestCase):
             self.provider.sync_turn('这个折叠机关是怎么做的？','来源：https://example.org/folding')
         with Journal(self.root)as store:self.assertEqual(store.status()['total'],1)
         self.assertEqual(self.provider.current_user,'')
+
+
+    def test_signed_wire_context_uses_current_correction_and_drops_forgotten_prefetch(self):
+        from fish_context import HOST_NOTE
+        self.initialize()
+        with Journal(self.root)as journal:row=journal.capture('old-chat','我喜欢黄色机关。','收到。')
+        def message(query):
+            self.provider.on_turn_start(1,query)
+            packet=self.provider.prefetch(query)
+            return {'role':'user','content':query+'\n\n<memory-context>\n'+HOST_NOTE+'\n\n'+packet+'\n</memory-context>'}
+        first=message('喜欢什么机关？')
+        self.assertIn('黄色',first['content'])
+        with Journal(self.root)as journal:journal.update(row['id'],row['revision'],summary='用户更正：喜欢蓝色机关。')
+        second=message('喜欢什么机关？')
+        request={'messages':[first,{'role':'assistant','content':'收到。'},second]}
+        sent=self.provider.transport.project(request,'chat-new')
+        self.assertNotIn('黄色',str(sent));self.assertIn('蓝色',str(sent))
+        with Journal(self.root)as journal:
+            current=journal.get(row['id']);journal.update(row['id'],current['revision'],forget=True)
+        third=message('喜欢什么机关？')
+        sent=self.provider.transport.project({'messages':request['messages']+[{'role':'assistant','content':'收到。'},third]},'chat-new')
+        self.assertNotIn('黄色',str(sent));self.assertNotIn('蓝色',str(sent))
 
 if __name__=='__main__':unittest.main()
